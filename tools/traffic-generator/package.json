@@ -1,0 +1,10 @@
+{
+  "name": "@ai-analyzer/traffic-generator",
+  "version": "0.1.0",
+  "private": true,
+  "main": "src/index.ts",
+  "scripts": {
+    "start": "tsx src/index.ts",
+    "typecheck": "tsc --noEmit -p ."
+  }
+}

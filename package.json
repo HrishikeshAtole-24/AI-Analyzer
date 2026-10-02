@@ -1,0 +1,35 @@
+{
+  "name": "ai-analyzer",
+  "version": "0.1.0",
+  "private": true,
+  "description": "AI Log Analyzer & Incident Assistant: OTel log ingestion, anomaly detection and an LLM root-cause investigator.",
+  "workspaces": [
+    "packages/*",
+    "services/*",
+    "tools/*"
+  ],
+  "scripts": {
+    "dev:gateway": "npm run dev -w @ai-analyzer/gateway-mock",
+    "dev:payment": "npm run dev -w @ai-analyzer/payment-service",
+    "dev:order": "npm run dev -w @ai-analyzer/order-service",
+    "dev:services": "concurrently -n gateway,payment,order -c magenta,yellow,cyan \"npm:dev:gateway\" \"npm:dev:payment\" \"npm:dev:order\"",
+    "traffic": "npm run start -w @ai-analyzer/traffic-generator --",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "vitest run",
+    "infra:up": "docker compose up -d",
+    "infra:down": "docker compose down",
+    "test:watch": "vitest",
+    "docs:postman": "node scripts/build-postman.cjs"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.6",
+    "@types/node": "^26.6.4",
+    "concurrently": "^10.0.5",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.3"
+  }
+}
