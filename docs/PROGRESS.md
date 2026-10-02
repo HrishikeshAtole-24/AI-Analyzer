@@ -27,7 +27,7 @@ every work session.
 - [x] Unit tests (17 passing)
 - [x] docker-compose: Redpanda + console, OpenSearch, Postgres with pgvector
 - [x] Run `docker compose up` and confirm all four containers are healthy
-- [ ] Graphify knowledge graph (`graphify-out/`): graphify is installed, graph not built yet
+- [x] Graphify knowledge graph (`graphify-out/`): 437 nodes, 638 edges, 32 communities
 
 ## Log
 
@@ -40,6 +40,7 @@ every work session.
   - Redpanda: cluster healthy, about 130 MB RAM
   - Redpanda Console at http://localhost:8080
 - The whole stack uses about 1.3 GB.
+- First graphify build: 437 nodes, 638 edges, 32 communities (see `graphify-out/GRAPH_REPORT.md`, open `graphify-out/graph.html`).
 
 ### 2026-10-02: Week 1 built
 
