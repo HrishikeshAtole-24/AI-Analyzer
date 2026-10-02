@@ -1,5 +1,11 @@
 import type { Server } from 'node:http';
-import express, { type ErrorRequestHandler, type Express, type RequestHandler } from 'express';
+import express, {
+  type ErrorRequestHandler,
+  type Express,
+  type Request as ExpressRequest,
+  type RequestHandler,
+  type Response as ExpressResponse,
+} from 'express';
 import { FaultError, type FaultRegistry } from './faults';
 import type { Logger, ServiceIdentity } from './logger';
 
@@ -64,14 +70,26 @@ export async function callJson<T = unknown>(
   return { status: res.status, body: body as T };
 }
 
-/** Logs one record per completed request. These records are what the platform derives metrics from. */
-export function requestLogger(logger: Logger): RequestHandler {
+/** Status logged when the client hung up before the response was sent (nginx convention). */
+export const CLIENT_CLOSED_REQUEST = 499;
+
+/**
+ * Logs one record per request. These records are what the platform derives metrics from.
+ * It listens for `close`, not `finish`: when a caller times out and disconnects, `finish` never
+ * fires, and the slowest requests (the ones that matter in an incident) would go unlogged.
+ */
+export function requestLogger(
+  logger: Logger,
+  options: { skip?: (req: ExpressRequest, res: ExpressResponse) => boolean } = {},
+): RequestHandler {
   return (req, res, next) => {
     if (req.path === '/health' || req.path.startsWith('/admin/')) return next();
     const start = process.hrtime.bigint();
-    res.on('finish', () => {
+    res.once('close', () => {
+      if (options.skip?.(req, res)) return;
       const durationMs = Number(process.hrtime.bigint() - start) / 1e6;
-      const status = res.statusCode;
+      const aborted = !res.writableFinished;
+      const status = aborted ? CLIENT_CLOSED_REQUEST : res.statusCode;
       const route = req.route ? `${req.baseUrl}${String(req.route.path)}` : 'unmatched';
       const attributes = {
         'http.request.method': req.method,
@@ -79,8 +97,11 @@ export function requestLogger(logger: Logger): RequestHandler {
         'url.path': req.originalUrl.split('?')[0] ?? req.originalUrl,
         'http.response.status_code': status,
         duration_ms: Math.round(durationMs * 100) / 100,
+        ...(aborted ? { 'http.client_aborted': true } : {}),
       };
-      const body = `${req.method} ${route} ${status} ${durationMs.toFixed(1)}ms`;
+      const body = aborted
+        ? `${req.method} ${route} client closed the connection after ${durationMs.toFixed(1)}ms`
+        : `${req.method} ${route} ${status} ${durationMs.toFixed(1)}ms`;
       if (status >= 500) logger.error(body, attributes);
       else if (status >= 400) logger.warn(body, attributes);
       else logger.info(body, attributes);
@@ -89,7 +110,7 @@ export function requestLogger(logger: Logger): RequestHandler {
   };
 }
 
-function errorHandler(logger: Logger): ErrorRequestHandler {
+export function errorHandler(logger: Logger): ErrorRequestHandler {
   return (err, req, res, _next) => {
     if (err instanceof HttpError) {
       res.status(err.status).json({ error: { code: err.code, message: err.message, details: err.details } });

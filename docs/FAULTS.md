@@ -64,7 +64,12 @@ The payment service gives up after 2 s and retries twice.
 - `WARN gateway call failed, retrying (attempt 1/3): http://localhost:4003/v1/charges timed out after 2000ms`
 - `ERROR payment failed after 3 gateway attempts: ... timed out` with `error.type=timeout`
 - payment-service returns 504 `gateway_timeout`; order-service returns 502
-- gateway-mock's own request logs show durations near `delayMs`
+- gateway-mock logs `POST /v1/charges client closed the connection after 2008ms` (status 499), because
+  payment-service hung up at its 2 s timeout
+
+**Detected (Oct 2, delayMs 3000, rate 0.5):** INC-2 opened in **56.7 s**. It was critical and covered both
+order-service and payment-service (p95 4,571 ms vs a 195 ms baseline; 4,425 ms vs 152 ms). Before the
+499 fix gateway-mock was not flagged, because its abandoned requests were never logged.
 
 **Observed (10 rps, 10 s, delayMs 3000, rate 0.5):** 75 OK, 6 failed with 5xx, p95 5034 ms.
 
@@ -85,7 +90,15 @@ See [services/payment-service/src/currency.ts](../services/payment-service/src/c
 
 **Observed (10 rps, 6 s):** 40 OK, 15 failed with 5xx.
 
-In Week 3 the scenario will also call `POST /deploys` so the detector can link the incident to the deploy.
+Turning the fault on or off also calls `POST /api/v1/deploys` (when `DEPLOY_WEBHOOK_URL` is set), the way a
+CI/CD pipeline would. The record says that 1.5.0 was deployed, not that it is broken.
+
+**Detected (Oct 2, 10 orders/s, 6-minute baseline):** the fault went on at 19:40:05.656 and INC-1 opened at
+19:41:20.154, a **time to detect of 74.5 s**.
+- One critical incident covered both services: payment-service error rate 40.8% and order-service 32.4%,
+  both against a 0% baseline (z = 20.4 and 16.2).
+- The 1.5.0 deploy at 19:40:05 was on the incident timeline.
+- Anomalies kept extending the incident while the fault stayed on. After the rollback it auto-resolved.
 
 **Recovery.** Turning the fault off rolls back to 1.4.2.
 

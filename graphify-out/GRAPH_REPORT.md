@@ -1,216 +1,225 @@
 # Graph Report - AI Analyzer  (2026-10-03)
 
 ## Corpus Check
-- Corpus is ~16,625 words - fits in a single context window. You may not need a graph.
+- 42 files · ~29,986 words
+- Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 437 nodes · 638 edges · 32 communities (29 shown, 3 thin omitted)
-- Extraction: 95% EXTRACTED · 5% INFERRED · 0% AMBIGUOUS · INFERRED: 31 edges (avg confidence: 0.86)
-- Token cost: 81,334 input · 0 output
+- 612 nodes · 988 edges · 40 communities (28 shown, 12 thin omitted)
+- Extraction: 98% EXTRACTED · 2% INFERRED · 0% AMBIGUOUS · INFERRED: 21 edges (avg confidence: 0.88)
+- Token cost: 86,482 input · 0 output
 
 ## Community Hubs (Navigation)
-- Config and Log Export
-- Fault Registry
+- Platform Clients and Ingest
+- Shared HTTP Layer
+- Detection, Deploys and Incidents
+- Service Packages
+- Shared Package and OTel
 - Root Workspace Config
+- Docs and Conventions
+- Platform Package
 - Traffic Generator
-- Shared Package and Tracing
 - Payment Service Logic
+- Fault Registry
 - Order Service Logic
+- Ingestion Design Decisions
 - Simulated DB Pool
-- Gateway Mock Package
-- Order Service Package
-- Payment Service Package
 - Postman Builder
+- Logger and Gateway Mock
 - TypeScript Base Config
-- Platform Architecture Plan
-- OpenTelemetry Dependencies
-- Gateway Mock Logic
-- Payment Flow and Faults
-- Docs and Fault Admin
-- Log Ingestion Contract
-- Order Flow and Faults
+- Metrics Aggregation
+- Logger Interface
 - Service Identity and Env
 - Traffic Generator Package
-- Tracing Design Decisions
-- Infra and Incident Pipeline
+- Platform and Shared TS Config
+- Detection and Incident Design
+- Trace Correlation
 - Process Monitor
-- Shared TS Config
 - Gateway TS Config
 - Order TS Config
 - Payment TS Config
 - Traffic TS Config
-- Upstream HTTP Calls
-- Error Response Shape
+- Demo Service Endpoints
+- Redpanda Containers
+- Log Search Mapping
+- Retry Storm Faults
+- OpenSearch Container
+- Postgres Container
+- Pipeline Stats Endpoint
+- OTel Attribute Conventions
+- Memory Leak Fault
+- System Architecture
+- Dashboard (Planned)
 
 ## God Nodes (most connected - your core abstractions)
-1. `FaultRegistry` - 16 edges
-2. `compilerOptions` - 13 edges
-3. `scripts` - 12 edges
-4. `Logger` - 12 edges
-5. `HttpLogExporter` - 11 edges
-6. `Fault scenarios` - 11 edges
-7. `SimulatedDbPool` - 10 edges
-8. `@ai-analyzer/shared package` - 9 edges
-9. `startService()` - 8 edges
-10. `LogAttributes` - 8 edges
+1. `scripts` - 19 edges
+2. `FaultRegistry` - 14 edges
+3. `compilerOptions` - 13 edges
+4. `HttpLogExporter` - 11 edges
+5. `Logger` - 11 edges
+6. `scripts` - 10 edges
+7. `main()` - 10 edges
+8. `vitest` - 10 edges
+9. `SimulatedDbPool` - 9 edges
+10. `config` - 9 edges
 
 ## Surprising Connections (you probably didn't know these)
-- `System architecture (demo system -> platform API -> Kafka -> worker -> OpenSearch -> detector -> Postgres -> AI -> dashboard)` --semantically_similar_to--> `Ingestion pipeline (API -> logs.raw -> log worker -> OpenSearch logs-*, logs.dlq)`  [INFERRED] [semantically similar]
+- `Results Metrics (lag, time to detect, throughput, accuracy)` --references--> `Week 5 Eval Harness (ground truth)`  [INFERRED]
+  README.md → docs/FAULTS.md
+- `Results Metrics (lag, time to detect, throughput, accuracy)` --references--> `INC-1 Bad Deploy Detected in 74.5 s`  [INFERRED]
+  README.md → docs/PROGRESS.md
+- `CLAUDE.md (Claude Code notes)` --references--> `Faults Invisible in Logs (stderr only)`  [INFERRED]
+  CLAUDE.md → docs/CODEBASE.md
+- `Fixed Tech Stack Rule` --conceptually_related_to--> `6-Week MVP Plan (Oct 5 to Nov 15 2026)`  [INFERRED]
+  CLAUDE.md → docs/PROGRESS.md
+- `AI Investigator` --conceptually_related_to--> `Evidence Verifier`  [INFERRED]
   README.md → docs/PROJECT_FLOW.md
-- `Ingestion pipeline (API -> logs.raw -> log worker -> OpenSearch logs-*, logs.dlq)` --references--> `redpanda (Kafka-compatible broker)`  [INFERRED]
-  docs/PROJECT_FLOW.md → docker-compose.yml
-- `2026-10-03: Infra running (all four containers healthy)` --references--> `opensearch (single node, :9200)`  [INFERRED]
-  docs/PROGRESS.md → docker-compose.yml
-- `chargeWithRetry()` --calls--> `sleep()`  [EXTRACTED]
-  services/payment-service/src/index.ts → packages/shared/src/db-pool.ts
-- `Keep the docs in sync rule` --references--> `Fault scenarios`  [EXTRACTED]
-  CLAUDE.md → docs/FAULTS.md
 
 ## Import Cycles
 - None detected.
 
 ## Hyperedges (group relationships)
-- **Demo order -> payment -> gateway call chain** — docs_api_post_orders, docs_api_post_payments, docs_api_post_v1_charges, docs_codebase_traffic_generator, docs_api_traceparent_propagation [EXTRACTED 1.00]
-- **Detection, investigation and verification pipeline** — docs_project_flow_anomaly_detector, docs_project_flow_incident_flow, docs_project_flow_ai_investigator, docs_project_flow_evidence_verifier, docker_compose_opensearch, docker_compose_postgres [EXTRACTED 1.00]
-- **Injected fault scenarios (eval ground truth)** — docs_faults_db_pool_exhaustion, docs_faults_gateway_timeout, docs_faults_bad_deploy, docs_faults_memory_leak, docs_faults_retry_storm, docs_faults_gateway_errors, docs_faults_eval_harness [EXTRACTED 1.00]
+- **At-least-once delivery with exactly-once storage** — docs_codebase_kafka_between_ingest_indexing, docs_codebase_idempotency_at_storage, docs_codebase_dead_letter_queue, docs_project_flow_ingestion_pipeline, docs_progress_opensearch_outage_test [EXTRACTED 1.00]
+- **Metrics -> EWMA detection -> incident grouping -> lifecycle** — docs_codebase_metrics_from_logs, docs_codebase_stateless_detection, docs_codebase_incident_grouping, docs_codebase_incident_lifecycle, docs_project_flow_detection_flow [EXTRACTED 1.00]
+- **Fault scenarios as eval ground truth** — docs_faults_db_pool_exhaustion, docs_faults_gateway_timeout, docs_faults_bad_deploy, docs_faults_memory_leak, docs_faults_retry_storm, docs_faults_gateway_errors, docs_faults_eval_harness [EXTRACTED 1.00]
 
-## Communities (32 total, 3 thin omitted)
+## Communities (40 total, 12 thin omitted)
 
-### Community 0 - "Config and Log Export"
-Cohesion: 0.09
-Nodes (18): envInt(), HttpLogExporter, HttpLogExporterOptions, attributeValue, LogBatch, logBatchSchema, LogRecord, logRecordSchema (+10 more)
+### Community 0 - "Platform Clients and Ingest"
+Cohesion: 0.07
+Nodes (43): main(), createProducer(), DeadLetter, ensureTopics(), kafka, sendToDlq(), dailyIndex(), ensureLogTemplate() (+35 more)
 
-### Community 1 - "Fault Registry"
-Cohesion: 0.10
-Nodes (15): FaultDefinition, FaultError, FaultRegistry, FaultState, FaultView, errorHandler(), faultRoutes(), requestLogger() (+7 more)
+### Community 1 - "Shared HTTP Layer"
+Cohesion: 0.07
+Nodes (29): callJson(), CLIENT_CLOSED_REQUEST, errorHandler(), faultRoutes(), requestLogger(), ServiceOptions, startService(), UpstreamError (+21 more)
 
-### Community 2 - "Root Workspace Config"
+### Community 2 - "Detection, Deploys and Incidents"
+Cohesion: 0.08
+Nodes (39): db, deployBody, deployRouter(), listQuery, detectOnce(), lastCompleteWindowEnd(), series(), startDetector() (+31 more)
+
+### Community 3 - "Service Packages"
+Cohesion: 0.04
+Nodes (43): @ai-analyzer/shared, dependencies, @ai-analyzer/shared, express, zod, express, zod, main (+35 more)
+
+### Community 4 - "Shared Package and OTel"
 Cohesion: 0.06
-Nodes (31): description, devDependencies, concurrently, tsx, @types/express, @types/node, typescript, vitest (+23 more)
+Nodes (35): dependencies, express, @opentelemetry/api, @opentelemetry/core, @opentelemetry/instrumentation, @opentelemetry/instrumentation-express, @opentelemetry/instrumentation-http, @opentelemetry/instrumentation-undici (+27 more)
 
-### Community 3 - "Traffic Generator"
+### Community 5 - "Root Workspace Config"
+Cohesion: 0.05
+Nodes (38): description, devDependencies, concurrently, tsx, @types/express, @types/node, typescript, vitest (+30 more)
+
+### Community 6 - "Docs and Conventions"
+Cohesion: 0.08
+Nodes (24): CLAUDE.md (Claude Code notes), Deploys Endpoints (/api/v1/deploys), API Reference, Shared Error Response Shape, Fault Admin Endpoints (/admin/faults), Code Conventions (Zod validation, HttpError, callJson timeouts), Codebase Guide, FaultRegistry (+16 more)
+
+### Community 7 - "Platform Package"
+Cohesion: 0.07
+Nodes (29): dependencies, @ai-analyzer/shared, express, kafkajs, @opensearch-project/opensearch, @prisma/client, zod, devDependencies (+21 more)
+
+### Community 8 - "Traffic Generator"
 Cohesion: 0.09
 Nodes (25): burstEvery, burstRps, burstSeconds, CURRENCIES, currentRps(), durationS, fire(), maxInFlight (+17 more)
 
-### Community 4 - "Shared Package and Tracing"
+### Community 9 - "Payment Service Logic"
 Cohesion: 0.10
-Nodes (22): exports, ./tracing, express, zod, main, name, private, scripts (+14 more)
+Nodes (18): CURRENCIES, CURRENCIES_V2, isSupportedCurrency(), toMinorUnits(), ChargeResult, DEFAULT_RETRY, faults, GATEWAY_TIMEOUT_MS (+10 more)
 
-### Community 5 - "Payment Service Logic"
-Cohesion: 0.12
-Nodes (17): CURRENCIES, CURRENCIES_V2, isSupportedCurrency(), toMinorUnits(), ChargeResult, DEFAULT_RETRY, faults, GATEWAY_TIMEOUT_MS (+9 more)
+### Community 10 - "Fault Registry"
+Cohesion: 0.19
+Nodes (6): FaultDefinition, FaultError, FaultRegistry, FaultState, FaultView, registry()
 
-### Community 6 - "Order Service Logic"
+### Community 11 - "Order Service Logic"
 Cohesion: 0.12
 Nodes (12): HttpError, auditCache, dbError(), logger, Order, orderRequest, orders, OrderStatus (+4 more)
 
-### Community 7 - "Simulated DB Pool"
-Cohesion: 0.18
-Nodes (8): DbPoolOptions, PoolStats, PoolTimeoutError, SimulatedDbPool, sleep(), Waiter, faults, chargeWithRetry()
+### Community 12 - "Ingestion Design Decisions"
+Cohesion: 0.13
+Nodes (11): POST /api/v1/logs (ingest), Dead-Letter Queue logs.dlq, HttpLogExporter, Kafka Between Ingest and Indexing, OTel Log Record Schema (Zod ingestion contract), requestLogger Middleware, Fault: gateway_timeout, Client-Abort 499 Logging Fix (+3 more)
 
-### Community 8 - "Gateway Mock Package"
-Cohesion: 0.12
-Nodes (15): dependencies, @ai-analyzer/shared, express, zod, @ai-analyzer/shared, express, zod, main (+7 more)
+### Community 13 - "Simulated DB Pool"
+Cohesion: 0.19
+Nodes (7): DbPoolOptions, PoolStats, PoolTimeoutError, SimulatedDbPool, sleep(), Waiter, faults
 
-### Community 9 - "Order Service Package"
-Cohesion: 0.12
-Nodes (15): dependencies, @ai-analyzer/shared, express, zod, @ai-analyzer/shared, express, zod, main (+7 more)
-
-### Community 10 - "Payment Service Package"
-Cohesion: 0.12
-Nodes (15): dependencies, @ai-analyzer/shared, express, zod, @ai-analyzer/shared, express, zod, main (+7 more)
-
-### Community 11 - "Postman Builder"
-Cohesion: 0.15
+### Community 14 - "Postman Builder"
+Cohesion: 0.14
 Nodes (11): collection, count, disable(), enable(), environment, fs, order, orderOutcomes (+3 more)
 
-### Community 12 - "TypeScript Base Config"
+### Community 15 - "Logger and Gateway Mock"
+Cohesion: 0.14
+Nodes (6): envInt(), createLogger(), chargeRequest, faults, logger, MAX_CONCURRENT
+
+### Community 16 - "TypeScript Base Config"
 Cohesion: 0.14
 Nodes (13): compilerOptions, esModuleInterop, forceConsistentCasingInFileNames, module, moduleResolution, noEmit, noUncheckedIndexedAccess, resolveJsonModule (+5 more)
 
-### Community 13 - "Platform Architecture Plan"
-Cohesion: 0.22
-Nodes (12): Postman collection (AI-Analyzer.postman_collection.json, build-postman.cjs), opensearch (single node, :9200), API reference, Week 5 eval harness (8 of 10 correct goal), Project flow, AI investigator (tools: search_logs, get_metrics, get_recent_deploys, get_trace), Evidence verifier (re-runs every cited query), Ingestion pipeline (API -> logs.raw -> log worker -> OpenSearch logs-*, logs.dlq) (+4 more)
+### Community 17 - "Metrics Aggregation"
+Cohesion: 0.26
+Nodes (10): Bucket, getPipelineStats(), getServiceMetrics(), listServices(), MinuteMetrics, PipelineStats, ServiceMetrics, ServiceSummary (+2 more)
 
-### Community 14 - "OpenTelemetry Dependencies"
-Cohesion: 0.15
-Nodes (13): dependencies, express, @opentelemetry/api, @opentelemetry/core, @opentelemetry/instrumentation, @opentelemetry/instrumentation-express, @opentelemetry/instrumentation-http, @opentelemetry/instrumentation-undici (+5 more)
-
-### Community 15 - "Gateway Mock Logic"
-Cohesion: 0.15
-Nodes (4): chargeRequest, faults, logger, MAX_CONCURRENT
-
-### Community 16 - "Payment Flow and Faults"
-Cohesion: 0.23
-Nodes (11): gateway-mock (port 4003), Payment model, payment-service (port 4002), POST /payments, POST /v1/charges, payment-service currency.ts (broken v2 table), bad_deploy fault (v1.5.0), gateway_errors fault (+3 more)
-
-### Community 17 - "Docs and Fault Admin"
-Cohesion: 0.20
-Nodes (10): AI Analyzer: notes for Claude Code, Graphify knowledge graph rebuild (graphify-out/), Fault admin endpoints (/admin/faults), FaultView, FaultRegistry, Codebase guide, OpenTelemetry semantic conventions for log attributes, traffic-generator CLI (+2 more)
-
-### Community 18 - "Log Ingestion Contract"
-Cohesion: 0.27
-Nodes (10): OTel log record format (eventId, severity, traceId, resource, attributes), Platform API (port 4000, planned), POST /api/v1/logs, createLogger(), http.ts (startService, requestLogger, callJson, error handler), HttpLogExporter, log-schema.ts (logRecordSchema, ingestion contract), @ai-analyzer/shared package (+2 more)
-
-### Community 19 - "Order Flow and Faults"
-Cohesion: 0.22
-Nodes (9): GET /health, Order model, order-service (port 4001), POST /orders, Process monitor (startProcessMonitor, 15 s samples), SimulatedDbPool, db_pool_exhaustion fault, memory_leak fault (+1 more)
-
-### Community 20 - "Service Identity and Env"
+### Community 19 - "Service Identity and Env"
 Cohesion: 0.28
 Nodes (5): env(), loggerOptionsFromEnv(), SERVICE, SERVICE, SERVICE
 
-### Community 21 - "Traffic Generator Package"
+### Community 20 - "Traffic Generator Package"
 Cohesion: 0.25
 Nodes (7): main, name, private, scripts, start, typecheck, version
 
-### Community 22 - "Tracing Design Decisions"
+### Community 21 - "Platform and Shared TS Config"
 Cohesion: 0.29
-Nodes (4): Fixed tech stack (TypeScript, Express, KafkaJS, OpenSearch, Postgres+Prisma+pgvector, Zod, Next.js CSS Modules, Vitest), W3C traceparent propagation, initTracing() (separate tracing entry point), One order end to end (sequence)
+Nodes (5): extends, include, extends, include, ../../tsconfig.base.json
 
-### Community 23 - "Infra and Incident Pipeline"
-Cohesion: 0.29
-Nodes (7): postgres (pgvector pg16, :5432), redpanda (Kafka-compatible broker), redpanda-console (web UI :8080), 2026-10-03: Infra running (all four containers healthy), Metrics + anomaly detector (EWMA / z-score), Incident flow (detected -> identified), Next.js dashboard (Week 6)
+### Community 22 - "Detection and Incident Design"
+Cohesion: 0.38
+Nodes (4): GET /api/v1/metrics, Incidents Endpoints (/api/v1/incidents), Incident Lifecycle (detected->investigating->identified->resolved), Detection and Incidents Flow
 
-### Community 25 - "Shared TS Config"
+### Community 23 - "Trace Correlation"
+Cohesion: 0.67
+Nodes (3): GET /api/v1/traces/:traceId, W3C traceparent Propagation, One Order End-to-End Flow
+
+### Community 25 - "Gateway TS Config"
 Cohesion: 0.50
 Nodes (3): extends, include, ../../tsconfig.base.json
 
-### Community 26 - "Gateway TS Config"
+### Community 26 - "Order TS Config"
 Cohesion: 0.50
 Nodes (3): extends, include, ../../tsconfig.base.json
 
-### Community 27 - "Order TS Config"
+### Community 27 - "Payment TS Config"
 Cohesion: 0.50
 Nodes (3): extends, include, ../../tsconfig.base.json
 
-### Community 28 - "Payment TS Config"
+### Community 28 - "Traffic TS Config"
 Cohesion: 0.50
 Nodes (3): extends, include, ../../tsconfig.base.json
 
-### Community 29 - "Traffic TS Config"
-Cohesion: 0.50
-Nodes (3): extends, include, ../../tsconfig.base.json
+### Community 29 - "Demo Service Endpoints"
+Cohesion: 0.67
+Nodes (3): POST /v1/charges (gateway-mock), POST /orders, POST /payments
+
+## Ambiguous Edges - Review These
+- `Shared Error Response Shape` → `SimulatedDbPool (in-process DB pool)`  [AMBIGUOUS]
+  docs/CODEBASE.md · relation: conceptually_related_to
 
 ## Knowledge Gaps
-- **206 isolated node(s):** `name`, `version`, `private`, `description`, `workspaces` (+201 more)
-  These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 234 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
-- **3 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+- **266 isolated node(s):** `HttpLogExporterOptions`, `LogBatch`, `FaultDefinition`, `FaultState`, `FaultView` (+261 more)
+  These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 311 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
+- **12 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `vitest` connect `Config and Log Export` to `Fault Registry`, `Root Workspace Config`, `Simulated DB Pool`?**
-  _High betweenness centrality (0.071) - this node is a cross-community bridge._
-- **Why does `@opentelemetry/api` connect `Shared Package and Tracing` to `Config and Log Export`?**
-  _High betweenness centrality (0.045) - this node is a cross-community bridge._
-- **Why does `FaultRegistry` connect `Fault Registry` to `Payment Service Logic`, `Order Service Logic`, `Gateway Mock Logic`?**
-  _High betweenness centrality (0.030) - this node is a cross-community bridge._
-- **What connects `name`, `version`, `private` to the rest of the system?**
-  _206 weakly-connected nodes found - possible documentation gaps or missing edges._
-- **Should `Config and Log Export` be split into smaller, more focused modules?**
-  _Cohesion score 0.09041835357624832 - nodes in this community are weakly interconnected._
-- **Should `Fault Registry` be split into smaller, more focused modules?**
-  _Cohesion score 0.0990990990990991 - nodes in this community are weakly interconnected._
-- **Should `Root Workspace Config` be split into smaller, more focused modules?**
-  _Cohesion score 0.0625 - nodes in this community are weakly interconnected._
+- **What is the exact relationship between `Shared Error Response Shape` and `SimulatedDbPool (in-process DB pool)`?**
+  _Edge tagged AMBIGUOUS (relation: conceptually_related_to) - confidence is low._
+- **Why does `@ai-analyzer/shared` connect `Service Packages` to `Platform Package`?**
+  _High betweenness centrality (0.101) - this node is a cross-community bridge._
+- **Why does `vitest` connect `Shared HTTP Layer` to `Platform Clients and Ingest`, `Detection, Deploys and Incidents`, `Root Workspace Config`, `Fault Registry`, `Simulated DB Pool`?**
+  _High betweenness centrality (0.097) - this node is a cross-community bridge._
+- **Why does `kafkajs` connect `Platform Clients and Ingest` to `Platform Package`?**
+  _High betweenness centrality (0.086) - this node is a cross-community bridge._
+- **What connects `HttpLogExporterOptions`, `LogBatch`, `FaultDefinition` to the rest of the system?**
+  _266 weakly-connected nodes found - possible documentation gaps or missing edges._
+- **Should `Platform Clients and Ingest` be split into smaller, more focused modules?**
+  _Cohesion score 0.07390873015873016 - nodes in this community are weakly interconnected._
+- **Should `Shared HTTP Layer` be split into smaller, more focused modules?**
+  _Cohesion score 0.06708595387840671 - nodes in this community are weakly interconnected._

@@ -1,0 +1,29 @@
+{
+  "name": "@ai-analyzer/platform",
+  "version": "0.1.0",
+  "private": true,
+  "main": "src/api.ts",
+  "scripts": {
+    "dev:api": "tsx watch --env-file-if-exists=../../.env src/api.ts",
+    "dev:worker": "tsx watch --env-file-if-exists=../../.env src/worker.ts",
+    "start:api": "tsx --env-file-if-exists=../../.env src/api.ts",
+    "start:worker": "tsx --env-file-if-exists=../../.env src/worker.ts",
+    "db:migrate": "dotenv -e ../../.env -- prisma migrate dev",
+    "db:deploy": "dotenv -e ../../.env -- prisma migrate deploy",
+    "db:generate": "prisma generate",
+    "db:studio": "dotenv -e ../../.env -- prisma studio",
+    "typecheck": "tsc --noEmit -p ."
+  },
+  "devDependencies": {
+    "dotenv-cli": "^11.0.0",
+    "prisma": "^6.19.3"
+  },
+  "dependencies": {
+    "@opensearch-project/opensearch": "^3.9.0",
+    "@prisma/client": "^6.19.3",
+    "express": "^5.2.1",
+    "kafkajs": "^2.2.4",
+    "zod": "^4.6.5",
+    "@ai-analyzer/shared": "0.1.0"
+  }
+}

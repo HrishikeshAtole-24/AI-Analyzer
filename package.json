@@ -6,19 +6,27 @@
   "workspaces": [
     "packages/*",
     "services/*",
-    "tools/*"
+    "tools/*",
+    "apps/*"
   ],
   "scripts": {
+    "setup": "npm install && npm run infra:up && npm run db:deploy",
+    "dev:services": "concurrently -n gateway,payment,order -c magenta,yellow,cyan \"npm:dev:gateway\" \"npm:dev:payment\" \"npm:dev:order\"",
+    "dev:platform": "concurrently -n api,worker -c green,blue \"npm:dev:api\" \"npm:dev:worker\"",
+    "dev:all": "concurrently -n gateway,payment,order,api,worker -c magenta,yellow,cyan,green,blue \"npm:dev:gateway\" \"npm:dev:payment\" \"npm:dev:order\" \"npm:dev:api\" \"npm:dev:worker\"",
     "dev:gateway": "npm run dev -w @ai-analyzer/gateway-mock",
     "dev:payment": "npm run dev -w @ai-analyzer/payment-service",
     "dev:order": "npm run dev -w @ai-analyzer/order-service",
-    "dev:services": "concurrently -n gateway,payment,order -c magenta,yellow,cyan \"npm:dev:gateway\" \"npm:dev:payment\" \"npm:dev:order\"",
+    "dev:api": "npm run dev:api -w @ai-analyzer/platform",
+    "dev:worker": "npm run dev:worker -w @ai-analyzer/platform",
     "traffic": "npm run start -w @ai-analyzer/traffic-generator --",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "test": "vitest run",
+    "test:watch": "vitest",
     "infra:up": "docker compose up -d",
     "infra:down": "docker compose down",
-    "test:watch": "vitest",
+    "db:migrate": "npm run db:migrate -w @ai-analyzer/platform",
+    "db:deploy": "npm run db:deploy -w @ai-analyzer/platform",
     "docs:postman": "node scripts/build-postman.cjs"
   },
   "engines": {

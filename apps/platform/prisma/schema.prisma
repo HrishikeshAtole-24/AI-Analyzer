@@ -1,0 +1,95 @@
+// Incident data for the platform. Logs live in OpenSearch; everything relational lives here.
+// After editing: npm run db:migrate -w @ai-analyzer/platform
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+/// A release of a service, posted by CI/CD (or the bad_deploy fault). Used to correlate incidents with changes.
+model Deploy {
+  id          String   @id @default(uuid())
+  service     String
+  version     String
+  environment String   @default("local")
+  commitSha   String?
+  description String?
+  deployedAt  DateTime @default(now())
+  createdAt   DateTime @default(now())
+
+  @@index([service, deployedAt])
+}
+
+enum IncidentStatus {
+  detected
+  investigating
+  identified
+  resolved
+}
+
+enum IncidentSeverity {
+  warning
+  critical
+}
+
+/// Related anomalies grouped into one problem, with a lifecycle.
+model Incident {
+  id            String           @id @default(uuid())
+  /// Short human number for the UI ("INC-12").
+  number        Int              @unique @default(autoincrement())
+  title         String
+  status        IncidentStatus   @default(detected)
+  severity      IncidentSeverity
+  services      String[]
+  /// Start of the first anomalous window.
+  startedAt     DateTime
+  detectedAt    DateTime         @default(now())
+  /// Start of the most recent anomalous window; drives grouping and auto-resolve.
+  lastAnomalyAt DateTime
+  resolvedAt    DateTime?
+  /// Filled by the AI investigator (Week 4) or the rule-based fallback.
+  summary       String?
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+  anomalies     Anomaly[]
+  events        IncidentEvent[]
+
+  @@index([status, lastAnomalyAt])
+}
+
+/// One metric of one service in one 1-minute window that broke from its baseline.
+model Anomaly {
+  id          String    @id @default(uuid())
+  incidentId  String?
+  incident    Incident? @relation(fields: [incidentId], references: [id])
+  service     String
+  /// error_rate | latency_p95 | heap_used
+  metric      String
+  windowStart DateTime
+  value       Float
+  baseline    Float
+  zScore      Float
+  detectedAt  DateTime  @default(now())
+
+  /// The detector re-reads recent windows every tick; this makes recording an anomaly idempotent.
+  @@unique([service, metric, windowStart])
+  @@index([incidentId])
+}
+
+/// Timeline entry on an incident: anomalies, status changes, related deploys, notes.
+model IncidentEvent {
+  id         String   @id @default(uuid())
+  incidentId String
+  incident   Incident @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+  /// anomaly | status_change | deploy | note
+  type       String
+  message    String
+  data       Json?
+  at         DateTime @default(now())
+
+  @@index([incidentId, at])
+}

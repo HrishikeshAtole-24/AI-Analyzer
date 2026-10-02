@@ -64,6 +64,27 @@ function setVersion(version: string): void {
   SERVICE.version = version;
   logger.setServiceVersion(version);
   logger.info(`payment-service running version ${version}`, { 'service.version': version });
+  recordDeploy(version);
+}
+
+/**
+ * Plays the part of the CI/CD pipeline: a real deploy posts to the platform's deploy webhook.
+ * The deploy record is a legitimate signal (it would exist in production); it does not say
+ * the release is broken.
+ */
+function recordDeploy(version: string): void {
+  const url = process.env.DEPLOY_WEBHOOK_URL;
+  if (!url) return;
+  callJson(url, {
+    method: 'POST',
+    timeoutMs: 3_000,
+    body: {
+      service: SERVICE.name,
+      version,
+      environment: SERVICE.environment,
+      description: version === STABLE_VERSION ? 'rollback' : 'currency config refresh',
+    },
+  }).catch((err: Error) => process.stderr.write(`[deploy] could not record deploy: ${err.message}\n`));
 }
 
 const paymentRequest = z.object({

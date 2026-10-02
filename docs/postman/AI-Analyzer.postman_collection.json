@@ -28,6 +28,14 @@
     {
       "key": "paymentId",
       "value": ""
+    },
+    {
+      "key": "traceId",
+      "value": ""
+    },
+    {
+      "key": "incidentId",
+      "value": ""
     }
   ],
   "item": [
@@ -1254,8 +1262,36 @@
       ]
     },
     {
-      "name": "Platform (Week 2, planned)",
+      "name": "Platform: ingestion",
+      "description": "Services send here automatically when LOG_INGEST_URL is set.",
       "item": [
+        {
+          "name": "Platform health",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{platformUrl}}/health",
+              "host": [
+                "{{platformUrl}}"
+              ],
+              "path": [
+                "health"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.expect(pm.response.code).to.be.oneOf([200]));"
+                ]
+              }
+            }
+          ]
+        },
         {
           "name": "Ingest logs",
           "request": {
@@ -1277,10 +1313,10 @@
                 "logs"
               ]
             },
-            "description": "Not implemented yet. Body matches packages/shared/src/log-schema.ts.",
+            "description": "Body matches packages/shared/src/log-schema.ts. Searchable about 1 s later.",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"logs\": [\n    {\n      \"eventId\": \"{{$guid}}\",\n      \"timestamp\": \"2026-10-12T10:00:00.000Z\",\n      \"severityText\": \"ERROR\",\n      \"severityNumber\": 17,\n      \"body\": \"payment failed after 3 gateway attempts: gateway responded 503 acquirer_unavailable\",\n      \"traceId\": \"c2ab3c5a0f1e4d2b9a8c7d6e5f4a3b2c\",\n      \"spanId\": \"0f1e4d2b9a8c7d6e\",\n      \"resource\": {\n        \"service.name\": \"payment-service\",\n        \"service.version\": \"1.4.2\",\n        \"deployment.environment\": \"local\"\n      },\n      \"attributes\": {\n        \"payment.attempts\": 3,\n        \"peer.service\": \"gateway-mock\"\n      }\n    }\n  ]\n}",
+              "raw": "{\n  \"logs\": [\n    {\n      \"eventId\": \"{{$guid}}\",\n      \"timestamp\": \"{{$isoTimestamp}}\",\n      \"severityText\": \"ERROR\",\n      \"severityNumber\": 17,\n      \"body\": \"payment failed after 3 gateway attempts: gateway responded 503 acquirer_unavailable\",\n      \"traceId\": \"c2ab3c5a0f1e4d2b9a8c7d6e5f4a3b2c\",\n      \"spanId\": \"0f1e4d2b9a8c7d6e\",\n      \"resource\": {\n        \"service.name\": \"postman-test\",\n        \"service.version\": \"1.0.0\",\n        \"deployment.environment\": \"local\"\n      },\n      \"attributes\": {\n        \"payment.attempts\": 3,\n        \"peer.service\": \"gateway-mock\"\n      }\n    }\n  ]\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -1295,6 +1331,602 @@
                 "type": "text/javascript",
                 "exec": [
                   "pm.test('status is 202', () => pm.expect(pm.response.code).to.be.oneOf([202]));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Ingest the same event twice (stored once)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{platformUrl}}/api/v1/logs",
+              "host": [
+                "{{platformUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "logs"
+              ]
+            },
+            "description": "Idempotency: both copies are accepted, the worker stores the event once.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"logs\": [\n    {\n      \"eventId\": \"7d0c2a52-0f3e-4b8e-9d55-2f0e6f6c9a11\",\n      \"timestamp\": \"{{$isoTimestamp}}\",\n      \"severityText\": \"ERROR\",\n      \"severityNumber\": 17,\n      \"body\": \"payment failed after 3 gateway attempts: gateway responded 503 acquirer_unavailable\",\n      \"traceId\": \"c2ab3c5a0f1e4d2b9a8c7d6e5f4a3b2c\",\n      \"spanId\": \"0f1e4d2b9a8c7d6e\",\n      \"resource\": {\n        \"service.name\": \"postman-test\",\n        \"service.version\": \"1.0.0\",\n        \"deployment.environment\": \"local\"\n      },\n      \"attributes\": {\n        \"payment.attempts\": 3,\n        \"peer.service\": \"gateway-mock\"\n      }\n    },\n    {\n      \"eventId\": \"7d0c2a52-0f3e-4b8e-9d55-2f0e6f6c9a11\",\n      \"timestamp\": \"{{$isoTimestamp}}\",\n      \"severityText\": \"ERROR\",\n      \"severityNumber\": 17,\n      \"body\": \"payment failed after 3 gateway attempts: gateway responded 503 acquirer_unavailable\",\n      \"traceId\": \"c2ab3c5a0f1e4d2b9a8c7d6e5f4a3b2c\",\n      \"spanId\": \"0f1e4d2b9a8c7d6e\",\n      \"resource\": {\n        \"service.name\": \"postman-test\",\n        \"service.version\": \"1.0.0\",\n        \"deployment.environment\": \"local\"\n      },\n      \"attributes\": {\n        \"payment.attempts\": 3,\n        \"peer.service\": \"gateway-mock\"\n      }\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 202', () => pm.expect(pm.response.code).to.be.oneOf([202]));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Ingest a batch with one invalid record (goes to DLQ)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{platformUrl}}/api/v1/logs",
+              "host": [
+                "{{platformUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "logs"
+              ]
+            },
+            "description": "accepted 1, rejected 1; the bad record is parked in the logs.dlq topic.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"logs\": [\n    {\n      \"eventId\": \"{{$guid}}\",\n      \"timestamp\": \"{{$isoTimestamp}}\",\n      \"severityText\": \"ERROR\",\n      \"severityNumber\": 17,\n      \"body\": \"payment failed after 3 gateway attempts: gateway responded 503 acquirer_unavailable\",\n      \"traceId\": \"c2ab3c5a0f1e4d2b9a8c7d6e5f4a3b2c\",\n      \"spanId\": \"0f1e4d2b9a8c7d6e\",\n      \"resource\": {\n        \"service.name\": \"postman-test\",\n        \"service.version\": \"1.0.0\",\n        \"deployment.environment\": \"local\"\n      },\n      \"attributes\": {\n        \"payment.attempts\": 3,\n        \"peer.service\": \"gateway-mock\"\n      }\n    },\n    {\n      \"body\": \"missing every required field\"\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 202', () => pm.expect(pm.response.code).to.be.oneOf([202]));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Platform: search and traces",
+      "item": [
+        {
+          "name": "Search logs (errors, last hour)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{platformUrl}}/api/v1/logs?level=error&from=now-1h&limit=20",
+              "host": [
+                "{{platformUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "logs"
+              ],
+              "query": [
+                {
+                  "key": "level",
+                  "value": "error"
+                },
+                {
+                  "key": "from",
+                  "value": "now-1h"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.expect(pm.response.code).to.be.oneOf([200]));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Search logs (full text + service)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{platformUrl}}/api/v1/logs?service=gateway-mock&q=charge authorised&limit=5",
+              "host": [
+                "{{platformUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "logs"
+              ],
+              "query": [
+                {
+                  "key": "service",
+                  "value": "gateway-mock"
+                },
+                {
+                  "key": "q",
+                  "value": "charge authorised"
+                },
+                {
+                  "key": "limit",
+                  "value": "5"
+                }
+              ]
+            },
+            "description": "Saves the first traceId for the trace view."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.expect(pm.response.code).to.be.oneOf([200]));",
+                  "const body = pm.response.json();",
+                  "if (body.logs.length) pm.collectionVariables.set('traceId', body.logs[0].traceId);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Search logs (attribute filter)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{platformUrl}}/api/v1/logs?attr=http.route:/payments&limit=5",
+              "host": [
+                "{{platformUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "logs"
+              ],
+              "query": [
+                {
+                  "key": "attr",
+                  "value": "http.route:/payments"
+                },
+                {
+                  "key": "limit",
+                  "value": "5"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.expect(pm.response.code).to.be.oneOf([200]));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Trace view",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{platformUrl}}/api/v1/traces/{{traceId}}",
+              "host": [
+                "{{platformUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "traces",
+                "{{traceId}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.expect(pm.response.code).to.be.oneOf([200]));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Platform: services and metrics",
+      "item": [
+        {
+          "name": "List services",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{platformUrl}}/api/v1/services",
+              "host": [
+                "{{platformUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "services"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.expect(pm.response.code).to.be.oneOf([200]));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Metrics (all services, 30 min)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{platformUrl}}/api/v1/metrics?from=now-30m",
+              "host": [
+                "{{platformUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "metrics"
+              ],
+              "query": [
+                {
+                  "key": "from",
+                  "value": "now-30m"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.expect(pm.response.code).to.be.oneOf([200]));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Metrics (payment-service)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{platformUrl}}/api/v1/metrics?service=payment-service&from=now-15m",
+              "host": [
+                "{{platformUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "metrics"
+              ],
+              "query": [
+                {
+                  "key": "service",
+                  "value": "payment-service"
+                },
+                {
+                  "key": "from",
+                  "value": "now-15m"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.expect(pm.response.code).to.be.oneOf([200]));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Pipeline stats (lag)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{platformUrl}}/api/v1/stats/pipeline?minutes=5",
+              "host": [
+                "{{platformUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "stats",
+                "pipeline"
+              ],
+              "query": [
+                {
+                  "key": "minutes",
+                  "value": "5"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.expect(pm.response.code).to.be.oneOf([200]));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Platform: deploys and incidents",
+      "description": "Incidents open automatically: run traffic, wait 5 minutes for a baseline, then run Scenario 3 (bad deploy).",
+      "item": [
+        {
+          "name": "Record a deploy",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{platformUrl}}/api/v1/deploys",
+              "host": [
+                "{{platformUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "deploys"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"service\": \"order-service\",\n  \"version\": \"2.1.1\",\n  \"commitSha\": \"a1b2c3d\",\n  \"description\": \"manual test deploy\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 201', () => pm.expect(pm.response.code).to.be.oneOf([201]));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List deploys",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{platformUrl}}/api/v1/deploys?limit=10",
+              "host": [
+                "{{platformUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "deploys"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "10"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.expect(pm.response.code).to.be.oneOf([200]));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List incidents",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{platformUrl}}/api/v1/incidents?status=all&limit=10",
+              "host": [
+                "{{platformUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "incidents"
+              ],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "all"
+                },
+                {
+                  "key": "limit",
+                  "value": "10"
+                }
+              ]
+            },
+            "description": "Saves the newest incident id."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.expect(pm.response.code).to.be.oneOf([200]));",
+                  "const body = pm.response.json();",
+                  "if (body.incidents.length) pm.collectionVariables.set('incidentId', body.incidents[0].id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get incident (timeline)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{platformUrl}}/api/v1/incidents/{{incidentId}}",
+              "host": [
+                "{{platformUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "incidents",
+                "{{incidentId}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.expect(pm.response.code).to.be.oneOf([200]));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Move incident to investigating",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{platformUrl}}/api/v1/incidents/{{incidentId}}",
+              "host": [
+                "{{platformUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "incidents",
+                "{{incidentId}}"
+              ]
+            },
+            "description": "409 if the incident is already resolved.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"investigating\",\n  \"note\": \"checking recent deploys\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200 or 409', () => pm.expect(pm.response.code).to.be.oneOf([200, 409]));"
                 ]
               }
             }

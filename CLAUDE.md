@@ -19,15 +19,22 @@ in the same piece of work, not later:
 
 ## Commands
 
-- `npm run dev:services`, `npm run traffic -- --rps 10`
+- First time: `npm run setup` (install, start Docker stack, migrate DB). Copy `.env.example` to `.env`.
+- `npm run dev:all` (3 services + platform API + worker), or `npm run dev:services` / `npm run dev:platform`
+- `npm run traffic -- --rps 10`
+- Schema change: edit `apps/platform/prisma/schema.prisma`, then `npm run db:migrate`
 - `npm test`, `npm run typecheck`. Run both before calling work done.
 - Check the Postman collection against running services:
   `npx -y newman run docs/postman/AI-Analyzer.postman_collection.json -e docs/postman/AI-Analyzer.local.postman_environment.json --folder "Order service"`
+  (platform folders: "Platform: ingestion", "Platform: search and traces", "Platform: services and metrics",
+  "Platform: deploys and incidents")
 
 ## Rules
 
 - Each service's `index.ts` must import `./instrumentation` first (see CODEBASE.md, "Tracing is a separate entry point").
 - Fault toggles must never be written to the log stream (stderr only).
+- The platform must not ingest its own logs (feedback loop); it logs to stdout only.
+- Detection must stay stateless and idempotent (anomalies are unique per service, metric and window).
 - Stack is fixed by the plan: TypeScript, Express, KafkaJS, OpenSearch, Postgres + Prisma + pgvector, Zod,
   Next.js with CSS Modules (no Tailwind), Vitest.
 - Only must-have features until the end-to-end demo works.

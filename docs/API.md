@@ -8,7 +8,7 @@ Every HTTP endpoint in the project, by service. The Postman collection in
 | order-service | 4001 | `http://localhost:4001` | Week 1, done |
 | payment-service | 4002 | `http://localhost:4002` | Week 1, done |
 | gateway-mock | 4003 | `http://localhost:4003` | Week 1, done |
-| platform API | 4000 | `http://localhost:4000` | Week 2, planned |
+| platform API | 4000 | `http://localhost:4000` | Weeks 2 and 3, done |
 
 ## Conventions
 
@@ -30,6 +30,7 @@ Every HTTP endpoint in the project, by service. The Postman collection in
   | 400 | `invalid_json` | Body is not valid JSON |
   | 404 | `not_found` | Unknown resource or route |
   | 500 | `internal_error` | Unhandled exception (logged with stack trace) |
+  | 499 | (log only) | The caller disconnected before the response. Never sent; logged with `http.client_aborted: true` |
   | 503 | `db_unavailable` | Could not get a DB connection within 2 s |
 
 ---
@@ -232,14 +233,51 @@ Request:
 
 ---
 
-## Platform API (Week 2, planned)
+## Platform API (port 4000)
 
-Listed here so the log format is fixed before the API exists. Services already send this format when
-`LOG_INGEST_URL` is set.
+Started with `npm run dev:platform` (API + worker) or `npm run dev:all` (everything). Needs the Docker
+stack (`npm run infra:up`) and the database migrated (`npm run db:deploy`).
 
-### `POST /api/v1/logs` (planned)
+| Method | Path | Purpose |
+|---|---|---|
+| `GET` | `/health` | OpenSearch and Postgres reachability |
+| `POST` | `/api/v1/logs` | Ingest a batch of log records |
+| `GET` | `/api/v1/logs` | Search logs |
+| `GET` | `/api/v1/traces/:traceId` | All logs of one request, across services |
+| `GET` | `/api/v1/services` | Services seen in the last 15 minutes |
+| `GET` | `/api/v1/metrics` | Per-minute request rate, error rate, latency, heap |
+| `GET` | `/api/v1/stats/pipeline` | Logs indexed and end-to-end lag |
+| `POST` | `/api/v1/deploys` | Record a deploy |
+| `GET` | `/api/v1/deploys` | List deploys |
+| `GET` | `/api/v1/incidents` | List incidents |
+| `GET` | `/api/v1/incidents/:id` | One incident with timeline and anomalies |
+| `PATCH` | `/api/v1/incidents/:id` | Change incident status |
 
-Accepts a batch of 1 to 1000 OpenTelemetry-style log records and returns `202 Accepted` once they are on Kafka.
+Platform-specific error codes:
+
+| Status | Code | Meaning |
+|---|---|---|
+| 409 | `invalid_transition` | Incident status change not allowed |
+| 503 | `ingest_unavailable` | Kafka did not accept the batch; retry |
+
+### `GET /health`
+
+```json
+{ "status": "ok", "opensearch": "ok", "postgres": "ok", "kafka": "connected" }
+```
+
+Returns 503 with `"status": "degraded"` if OpenSearch or Postgres is down.
+
+### `POST /api/v1/logs`
+
+Accepts 1 to 1000 OpenTelemetry-style log records. It returns `202 Accepted` once the valid records
+are on Kafka (`acks=all`). Indexing happens later in the worker, so a record is searchable about
+1 second after the 202.
+
+Each record is validated on its own. Invalid records go to the `logs.dlq` topic and are not dropped.
+The response lists the first 10 with their index in the batch. If no record in the batch is valid,
+the status is 400.
+
 The schema lives in [packages/shared/src/log-schema.ts](../packages/shared/src/log-schema.ts).
 
 ```json
@@ -271,10 +309,214 @@ The schema lives in [packages/shared/src/log-schema.ts](../packages/shared/src/l
 
 | Field | Rule |
 |---|---|
-| `eventId` | UUID made by the producer; used to drop duplicates |
+| `eventId` | UUID made by the producer. The worker stores it as the document ID, so a resent event is stored once. |
 | `timestamp` | ISO 8601 with offset |
 | `severityText` / `severityNumber` | TRACE 1, DEBUG 5, INFO 9, WARN 13, ERROR 17, FATAL 21 |
 | `body` | up to 16 KB |
 | `traceId` / `spanId` | 32 / 16 lowercase hex, optional |
 | `resource` | `service.name` and `service.version` required |
 | `attributes` | flat map of string, number, boolean or null |
+
+Response when some or all records are accepted (202):
+
+```json
+{ "accepted": 1, "rejected": 1, "errors": [{ "index": 1, "issues": "✖ Invalid input: expected string, received undefined\n  → at eventId" }] }
+```
+
+| Status | When |
+|---|---|
+| 202 | At least one record accepted |
+| 400 | Body is not `{ logs: [1..1000] }`, or every record is invalid |
+| 503 | `ingest_unavailable`: Kafka is down. The services' exporters keep the batch and retry. |
+
+### `GET /api/v1/logs`
+
+Newest first.
+
+| Query | Default | Meaning |
+|---|---|---|
+| `service` | all | One service, or several separated by commas |
+| `level` | all | Minimum severity: `warn` returns WARN, ERROR and FATAL |
+| `from` / `to` | `now-15m` / `now` | ISO 8601, or date math such as `now-1h` |
+| `q` | | Full-text search on the message (all words must match) |
+| `traceId` | | Logs of one trace |
+| `attr` | | Attribute filter `key:value`; repeat for several, e.g. `attr=http.route:/payments` |
+| `limit` | 100 | 1 to 500 |
+| `cursor` | | `nextCursor` from the previous page |
+
+```json
+{
+  "logs": [
+    {
+      "eventId": "489ecdcf-77af-45a8-8366-567a7e58ac5c",
+      "@timestamp": "2026-10-02T19:33:49.308Z",
+      "indexedAt": "2026-10-02T19:33:50.275Z",
+      "severityText": "WARN",
+      "severityNumber": 13,
+      "body": "POST /orders 402 193.1ms",
+      "traceId": "9cb065596f31c3cb857d44ede8d55205",
+      "spanId": "264b2f3c1649f887",
+      "service": "order-service",
+      "serviceVersion": "2.1.0",
+      "environment": "local",
+      "host": "LAPTOP-D30O7FRT",
+      "http": { "method": "POST", "route": "/orders", "statusCode": 402 },
+      "durationMs": 193.13,
+      "resource": { "service.name": "order-service", "service.version": "2.1.0" },
+      "attributes": { "http.route": "/orders", "http.response.status_code": "402", "duration_ms": "193.13" }
+    }
+  ],
+  "total": 156,
+  "nextCursor": "WzE3OTA5..."
+}
+```
+
+`total` stops counting at 10,000. In `attributes` every value is a string, because OpenSearch stores
+them as a `flat_object`. The typed copies are in `http`, `durationMs`, `process`, `dbPool` and
+`exceptionType`.
+
+### `GET /api/v1/traces/:traceId`
+
+Every log of one request across all services, oldest first. Returns 404 if no logs have this trace ID.
+
+```json
+{
+  "traceId": "0c9a483c1bb0437603b89c29cc671ba8",
+  "services": ["order-service", "gateway-mock", "payment-service"],
+  "startedAt": "2026-10-02T19:33:54.890Z",
+  "endedAt": "2026-10-02T19:33:55.023Z",
+  "durationMs": 133,
+  "errorCount": 0,
+  "logCount": 6,
+  "logs": []
+}
+```
+
+### `GET /api/v1/services`
+
+```json
+{
+  "services": [
+    {
+      "service": "payment-service",
+      "version": "1.4.2",
+      "lastSeen": "2026-10-02T19:33:55.004Z",
+      "logsLast15m": 316,
+      "requestsLast15m": 156,
+      "errorRateLast15m": 0
+    }
+  ],
+  "count": 3
+}
+```
+
+### `GET /api/v1/metrics`
+
+Per-service, per-minute metrics derived from the logs. These are the series the anomaly detector uses.
+
+| Query | Default |
+|---|---|
+| `service` | all (comma-separated list allowed) |
+| `from` / `to` | `now-30m` / `now` |
+
+```json
+{
+  "from": "now-30m",
+  "to": "now",
+  "intervalSeconds": 60,
+  "services": [
+    {
+      "service": "payment-service",
+      "windows": [
+        {
+          "windowStart": "2026-10-02T19:34:00.000Z",
+          "requests": 203,
+          "errors": 0,
+          "errorRate": 0,
+          "latencyP50": 112.4,
+          "latencyP95": 147.9,
+          "latencyP99": 171.2,
+          "heapUsedMb": 33
+        }
+      ]
+    }
+  ]
+}
+```
+
+- `requests` counts request logs, the records that have `duration_ms`.
+- `errors` counts the 5xx responses among them.
+- `errorRate` and the latency fields are `null` in a minute with no requests.
+- `heapUsedMb` is the highest heap sample from the process monitor in that minute.
+
+### `GET /api/v1/stats/pipeline?minutes=5`
+
+How much was indexed, and the lag from an event's timestamp to when it was indexed.
+
+```json
+{ "windowMinutes": 5, "logsIndexed": 1138, "lagMs": { "p50": 546, "p95": 1007, "p99": 1115, "max": 25846 } }
+```
+
+### `POST /api/v1/deploys`
+
+Records a release. CI/CD calls this; locally the `bad_deploy` fault does (through `DEPLOY_WEBHOOK_URL`).
+
+```json
+{ "service": "payment-service", "version": "1.5.0", "environment": "local", "commitSha": "a1b2c3d", "description": "currency config refresh" }
+```
+
+Only `service` and `version` are required. `deployedAt` (ISO 8601) defaults to now. Returns 201 with the stored deploy.
+
+### `GET /api/v1/deploys?service=&since=&limit=50`
+
+Newest first. Response: `{ "deploys": Deploy[], "count": n }`.
+
+### `GET /api/v1/incidents?status=open&service=&limit=20`
+
+`status` is one of `open` (anything not resolved), `resolved`, `all` (default), `detected`,
+`investigating` or `identified`. Newest first.
+
+```json
+{
+  "incidents": [
+    {
+      "id": "6c1e...",
+      "number": 1,
+      "title": "Error rate 34.8% on payment-service (baseline 0.4%)",
+      "status": "detected",
+      "severity": "critical",
+      "services": ["payment-service", "order-service"],
+      "startedAt": "2026-10-02T19:41:00.000Z",
+      "detectedAt": "2026-10-02T19:42:16.000Z",
+      "lastAnomalyAt": "2026-10-02T19:43:00.000Z",
+      "resolvedAt": null,
+      "summary": null,
+      "anomalyCount": 4
+    }
+  ],
+  "count": 1
+}
+```
+
+### `GET /api/v1/incidents/:id`
+
+`:id` is the UUID, the number (`1`), or `INC-1`. The response is the incident plus:
+
+- `events`: the timeline, oldest first. `type` is `anomaly`, `deploy`, `status_change` or `note`.
+- `anomalies`: every anomalous window grouped into this incident, with `metric`, `value`, `baseline` and `zScore`.
+
+### `PATCH /api/v1/incidents/:id`
+
+```json
+{ "status": "investigating", "note": "looking at the 1.5.0 deploy" }
+```
+
+Allowed moves:
+
+| From | To |
+|---|---|
+| `detected` | `investigating`, `identified`, `resolved` |
+| `investigating` | `identified`, `resolved` |
+| `identified` | `investigating`, `resolved` |
+
+`resolved` is final; a recurrence opens a new incident. Other moves return `409 invalid_transition`.

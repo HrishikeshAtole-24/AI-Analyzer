@@ -42,6 +42,10 @@ function req(name, method, base, urlPath, body, opts = {}) {
       exec.push(`if (body.${field}) pm.collectionVariables.set('${variable}', body.${field});`);
     }
   }
+  if (opts.script) {
+    if (!opts.save) exec.push('const body = pm.response.json();');
+    exec.push(...opts.script);
+  }
   if (exec.length) item.event = [{ listen: 'test', script: { type: 'text/javascript', exec } }];
   return item;
 }
@@ -62,6 +66,18 @@ const order = {
 };
 const orderOutcomes = [201, 402, 502, 503];
 
+const sampleLog = (eventId) => ({
+  eventId,
+  timestamp: '{{$isoTimestamp}}',
+  severityText: 'ERROR',
+  severityNumber: 17,
+  body: 'payment failed after 3 gateway attempts: gateway responded 503 acquirer_unavailable',
+  traceId: 'c2ab3c5a0f1e4d2b9a8c7d6e5f4a3b2c',
+  spanId: '0f1e4d2b9a8c7d6e',
+  resource: { 'service.name': 'postman-test', 'service.version': '1.0.0', 'deployment.environment': 'local' },
+  attributes: { 'payment.attempts': 3, 'peer.service': 'gateway-mock' },
+});
+
 const collection = {
   info: {
     name: 'AI Analyzer',
@@ -79,6 +95,8 @@ const collection = {
     { key: 'platformUrl', value: 'http://localhost:4000' },
     { key: 'orderId', value: '' },
     { key: 'paymentId', value: '' },
+    { key: 'traceId', value: '' },
+    { key: 'incidentId', value: '' },
   ],
   item: [
     folder('Health', [
@@ -190,34 +208,64 @@ const collection = {
       ],
       'Immediate retries multiply gateway load. Add bursts: npm run traffic -- --rps 10 --burst-every 20 --burst-rps 60',
     ),
-    folder('Platform (Week 2, planned)', [
-      req(
-        'Ingest logs',
-        'POST',
-        'platformUrl',
-        'api/v1/logs',
-        {
-          logs: [
-            {
-              eventId: '{{$guid}}',
-              timestamp: '2026-10-12T10:00:00.000Z',
-              severityText: 'ERROR',
-              severityNumber: 17,
-              body: 'payment failed after 3 gateway attempts: gateway responded 503 acquirer_unavailable',
-              traceId: 'c2ab3c5a0f1e4d2b9a8c7d6e5f4a3b2c',
-              spanId: '0f1e4d2b9a8c7d6e',
-              resource: {
-                'service.name': 'payment-service',
-                'service.version': '1.4.2',
-                'deployment.environment': 'local',
-              },
-              attributes: { 'payment.attempts': 3, 'peer.service': 'gateway-mock' },
-            },
-          ],
-        },
-        { expect: [202], description: 'Not implemented yet. Body matches packages/shared/src/log-schema.ts.' },
-      ),
+    folder(
+      'Platform: ingestion',
+      [
+        req('Platform health', 'GET', 'platformUrl', 'health', undefined, { expect: [200] }),
+        req('Ingest logs', 'POST', 'platformUrl', 'api/v1/logs', { logs: [sampleLog('{{$guid}}')] }, {
+          expect: [202],
+          description: 'Body matches packages/shared/src/log-schema.ts. Searchable about 1 s later.',
+        }),
+        req('Ingest the same event twice (stored once)', 'POST', 'platformUrl', 'api/v1/logs', {
+          logs: [sampleLog('7d0c2a52-0f3e-4b8e-9d55-2f0e6f6c9a11'), sampleLog('7d0c2a52-0f3e-4b8e-9d55-2f0e6f6c9a11')],
+        }, { expect: [202], description: 'Idempotency: both copies are accepted, the worker stores the event once.' }),
+        req('Ingest a batch with one invalid record (goes to DLQ)', 'POST', 'platformUrl', 'api/v1/logs', {
+          logs: [sampleLog('{{$guid}}'), { body: 'missing every required field' }],
+        }, { expect: [202], description: 'accepted 1, rejected 1; the bad record is parked in the logs.dlq topic.' }),
+      ],
+      'Services send here automatically when LOG_INGEST_URL is set.',
+    ),
+    folder('Platform: search and traces', [
+      req('Search logs (errors, last hour)', 'GET', 'platformUrl', 'api/v1/logs?level=error&from=now-1h&limit=20', undefined, {
+        expect: [200],
+      }),
+      req('Search logs (full text + service)', 'GET', 'platformUrl', 'api/v1/logs?service=gateway-mock&q=charge authorised&limit=5', undefined, {
+        expect: [200],
+        script: ["if (body.logs.length) pm.collectionVariables.set('traceId', body.logs[0].traceId);"],
+        description: 'Saves the first traceId for the trace view.',
+      }),
+      req('Search logs (attribute filter)', 'GET', 'platformUrl', 'api/v1/logs?attr=http.route:/payments&limit=5', undefined, {
+        expect: [200],
+      }),
+      req('Trace view', 'GET', 'platformUrl', 'api/v1/traces/{{traceId}}', undefined, { expect: [200] }),
     ]),
+    folder('Platform: services and metrics', [
+      req('List services', 'GET', 'platformUrl', 'api/v1/services', undefined, { expect: [200] }),
+      req('Metrics (all services, 30 min)', 'GET', 'platformUrl', 'api/v1/metrics?from=now-30m', undefined, { expect: [200] }),
+      req('Metrics (payment-service)', 'GET', 'platformUrl', 'api/v1/metrics?service=payment-service&from=now-15m', undefined, {
+        expect: [200],
+      }),
+      req('Pipeline stats (lag)', 'GET', 'platformUrl', 'api/v1/stats/pipeline?minutes=5', undefined, { expect: [200] }),
+    ]),
+    folder('Platform: deploys and incidents', [
+      req('Record a deploy', 'POST', 'platformUrl', 'api/v1/deploys', {
+        service: 'order-service',
+        version: '2.1.1',
+        commitSha: 'a1b2c3d',
+        description: 'manual test deploy',
+      }, { expect: [201] }),
+      req('List deploys', 'GET', 'platformUrl', 'api/v1/deploys?limit=10', undefined, { expect: [200] }),
+      req('List incidents', 'GET', 'platformUrl', 'api/v1/incidents?status=all&limit=10', undefined, {
+        expect: [200],
+        script: ["if (body.incidents.length) pm.collectionVariables.set('incidentId', body.incidents[0].id);"],
+        description: 'Saves the newest incident id.',
+      }),
+      req('Get incident (timeline)', 'GET', 'platformUrl', 'api/v1/incidents/{{incidentId}}', undefined, { expect: [200] }),
+      req('Move incident to investigating', 'PATCH', 'platformUrl', 'api/v1/incidents/{{incidentId}}', {
+        status: 'investigating',
+        note: 'checking recent deploys',
+      }, { expect: [200, 409], description: '409 if the incident is already resolved.' }),
+    ], 'Incidents open automatically: run traffic, wait 5 minutes for a baseline, then run Scenario 3 (bad deploy).'),
   ],
 };
 
