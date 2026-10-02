@@ -7,7 +7,7 @@ every work session.
 
 | Week | Dates | Goal | Status |
 |---|---|---|---|
-| 1 | Oct 5 to 11 | Demo services, OTel logs and traces, fault injection, docker-compose | Done early (Oct 2). Compose not yet run. |
+| 1 | Oct 5 to 11 | Demo services, OTel logs and traces, fault injection, docker-compose | Done early (Oct 2 to 3) |
 | 2 | Oct 12 to 18 | POST /logs, Kafka, worker, OpenSearch, idempotency, DLQ, log search, trace view | Not started |
 | 3 | Oct 19 to 25 | 1-minute metrics, EWMA / z-score detection, deploy tracking, incident grouping and lifecycle | Not started |
 | 4 | Oct 26 to Nov 1 | Tool-calling AI investigator, evidence verifier, ranked hypotheses, resilience + fallback | Not started |
@@ -26,10 +26,20 @@ every work session.
 - [x] Process monitor (heap, RSS, event-loop delay, pool usage)
 - [x] Unit tests (17 passing)
 - [x] docker-compose: Redpanda + console, OpenSearch, Postgres with pgvector
-- [ ] Run `docker compose up` and confirm all four containers are healthy (Docker is not installed yet)
-- [ ] Graphify knowledge graph (`graphify-out/`); `pip install graphifyy` needs approval
+- [x] Run `docker compose up` and confirm all four containers are healthy
+- [ ] Graphify knowledge graph (`graphify-out/`): graphify is installed, graph not built yet
 
 ## Log
+
+### 2026-10-03: Infra running
+
+- Docker Desktop installed (Docker 29.8, Compose 5.5; 8 GB and 8 CPUs given to Docker).
+- `docker compose up -d` started all four containers and they report healthy:
+  - OpenSearch 2.17: cluster green, about 1.0 GB RAM
+  - Postgres 16 with pgvector 0.8.7
+  - Redpanda: cluster healthy, about 130 MB RAM
+  - Redpanda Console at http://localhost:8080
+- The whole stack uses about 1.3 GB.
 
 ### 2026-10-02: Week 1 built
 
