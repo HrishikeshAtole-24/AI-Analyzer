@@ -123,6 +123,7 @@ every work session.
     the wrong process. Infrastructure URLs and Redpanda's advertised address now use `127.0.0.1`.
   - Dashboard charts: a flat zero line was drawn on a 0 to 400% axis; the axis now has a minimum
     top per unit and rounds to "nice" values, and the in-progress minute is no longer plotted.
+- Knowledge graph rebuilt (graphify `--update`): 966 nodes, 1,738 edges, 58 communities.
 - Decisions: manual tool loop instead of the SDK tool runner (ledger and budgets); local lexical
   embeddings instead of an embedding API; Prisma `Unsupported("vector")` with hand-written HNSW indexes.
 
