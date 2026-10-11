@@ -1,0 +1,17 @@
+[
+  {
+    "id": "retry-storm",
+    "name": "payment-service retries 8x without backoff while the gateway fails",
+    "expected": "retry_storm @ payment-service",
+    "costUsd": 0,
+    "mode": "rule_based",
+    "fallbackReason": "no_api_key",
+    "claims": "0/2",
+    "got": "retry_storm @ payment-service",
+    "correct": true,
+    "top3": true,
+    "incident": 16,
+    "timeToDetectS": 68.3,
+    "timeToRootCauseS": 124.5
+  }
+]

@@ -27,7 +27,10 @@ interface Pattern {
 }
 
 interface Candidate {
-  score: number;
+  /** Specificity of the failure pattern; decides the order. */
+  specificity: number;
+  /** How many matching logs; only breaks ties between equally specific patterns. */
+  count: number;
   hypothesis: Omit<Hypothesis, 'rank'>;
 }
 
@@ -84,7 +87,8 @@ export async function runRuleBasedInvestigation(incident: IncidentForInvestigati
     const top = crashes[0]!;
     const snippet = top.exception ?? 'unhandled error';
     candidates.push({
-      score: 100 + total(crashes),
+      specificity: 100,
+      count: total(crashes),
       hypothesis: {
         title: `Release ${d.version} of ${d.service} introduced ${snippet} errors`,
         category: 'deploy_regression',
@@ -106,7 +110,8 @@ export async function runRuleBasedInvestigation(incident: IncidentForInvestigati
   if (pool.length) {
     const svc = pool[0]!.service;
     candidates.push({
-      score: 90 + total(pool),
+      specificity: 90,
+      count: total(pool),
       hypothesis: {
         title: `Database connection pool exhausted on ${svc}`,
         category: 'db_pool_exhaustion',
@@ -125,7 +130,8 @@ export async function runRuleBasedInvestigation(incident: IncidentForInvestigati
   if (slow.length) {
     const svc = slow[0]!.service;
     candidates.push({
-      score: 95 + total(slow), // above pool exhaustion: slow queries are what drain a pool
+      specificity: 95, // above pool exhaustion: slow queries are what drain a pool
+      count: total(slow),
       hypothesis: {
         title: `Slow database queries on ${svc}`,
         category: 'database_latency',
@@ -144,7 +150,8 @@ export async function runRuleBasedInvestigation(incident: IncidentForInvestigati
   if (heap.length) {
     const svc = heap[0]!.service;
     candidates.push({
-      score: 80 + total(heap),
+      specificity: 80,
+      count: total(heap),
       hypothesis: {
         title: `Memory leak in ${svc}`,
         category: 'memory_leak',
@@ -167,7 +174,8 @@ export async function runRuleBasedInvestigation(incident: IncidentForInvestigati
   if (retries.length && maxAttempts > 3) {
     const svc = retries[0]!.service;
     candidates.push({
-      score: 75 + total(retries),
+      specificity: 75,
+      count: total(retries),
       hypothesis: {
         title: `Retry storm from ${svc} (${maxAttempts} attempts, no backoff)`,
         category: 'retry_storm',
@@ -185,7 +193,8 @@ export async function runRuleBasedInvestigation(incident: IncidentForInvestigati
   const timeouts = find('timed out after').filter((p) => /gateway|v1\/charges|4003/.test(p.example));
   if (timeouts.length) {
     candidates.push({
-      score: 70 + total(timeouts),
+      specificity: 70,
+      count: total(timeouts),
       hypothesis: {
         title: 'Card gateway responds too slowly; payment-service times out',
         category: 'upstream_timeout',
@@ -200,10 +209,12 @@ export async function runRuleBasedInvestigation(incident: IncidentForInvestigati
   }
 
   // 7. Upstream errors.
-  const upstream = [...find('acquirer connection reset'), ...find('acquirer_unavailable')];
+  // Only the gateway's own errors: callers' retry warnings also mention acquirer_unavailable.
+  const upstream = [...find('acquirer connection reset', 'gateway-mock'), ...find('acquirer_unavailable', 'gateway-mock')];
   if (upstream.length) {
     candidates.push({
-      score: 65 + total(upstream),
+      specificity: 65,
+      count: total(upstream),
       hypothesis: {
         title: 'Card gateway is returning errors',
         category: 'upstream_errors',
@@ -222,7 +233,8 @@ export async function runRuleBasedInvestigation(incident: IncidentForInvestigati
     const svc = a?.service ?? incident.services[0] ?? 'unknown';
     const metric = a?.metric === 'latency_p95' ? 'latencyP95' : a?.metric === 'heap_used' ? 'heapUsedMb' : 'errorRate';
     candidates.push({
-      score: 0,
+      specificity: 0,
+      count: 0,
       hypothesis: {
         title: `Unexplained ${a?.metric ?? 'anomaly'} on ${svc}`,
         category: 'unknown' satisfies Category,
@@ -242,7 +254,9 @@ export async function runRuleBasedInvestigation(incident: IncidentForInvestigati
     });
   }
 
-  candidates.sort((a, b) => b.score - a.score);
+  // Specificity first: a raw count would let the noisiest pattern win (a retry storm logs more
+  // gateway errors than retries, but the retries are the cause).
+  candidates.sort((a, b) => b.specificity - a.specificity || b.count - a.count);
   const hypotheses = candidates.slice(0, 3).map((c, i) => ({ ...c.hypothesis, rank: i + 1 }));
   const top = hypotheses[0]!;
   return {

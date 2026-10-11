@@ -32,7 +32,7 @@ every work session.
 ## Week 2 checklist
 
 - [x] Platform workspace `apps/platform`: API process + worker process
-- [x] `POST /api/v1/logs`: per-record validation, Kafka publish (`acks=all`, idempotent producer), 202
+- [x] `POST /api/v1/logs`: per-record validation, Kafka publish (`acks=all`), 202
 - [x] Kafka topics `logs.raw` (6 partitions, keyed by service) and `logs.dlq`, created on startup
 - [x] Worker: consumer group `log-indexer`, bulk index to daily `logs-*` indices, commit after store
 - [x] Idempotent processing: `_id = eventId` + `create` (checked: same event sent 3 times, stored once)
@@ -79,14 +79,14 @@ every work session.
 - [x] pgvector: `Runbook` and `IncidentMemory` tables with HNSW cosine indexes; local feature-hashing embedder
 - [x] `search_runbooks` and `find_similar_incidents` tools; verifier refuses them as evidence
 - [x] Playbook attaches the closest runbook to each hypothesis
-- [x] Eval run over all scenarios (rule-based mode): see [EVAL.md](EVAL.md)
+- [x] Eval run over all scenarios (rule-based mode): 9 of 10 first pass, 10 of 10 after a ranking fix, control passed. See [EVAL.md](EVAL.md)
 
 ## Week 6 checklist
 
 - [x] Next.js 16 dashboard with CSS Modules and Recharts: incidents list, incident detail (root cause,
       verified evidence, queries, rejected claims, metrics around the start, timeline, anomalies),
       service health, log search, trace view; light and dark themes
-- [x] k6 load test in Docker (`npm run loadtest`): see [LOADTEST.md](LOADTEST.md)
+- [x] k6 load test in Docker (`npm run loadtest`): 4,998 events/s accepted, p99 273 ms (target 50 ms not met). See [LOADTEST.md](LOADTEST.md)
 - [x] README with measured numbers, resume line, demo script ([DEMO.md](DEMO.md))
 - [x] GitHub Actions CI: typecheck, unit tests, dashboard build
 - [ ] Record the demo video (a person has to do this)
@@ -96,13 +96,26 @@ every work session.
 ### 2026-10-11: Weeks 4 to 6 built
 
 - Built the investigator, verifier, playbook, knowledge base, eval harness, dashboard, load test
-  and CI (details in the checklists above and in CODEBASE.md). 59 unit tests.
+  and CI (details in the checklists above and in CODEBASE.md). 68 unit tests.
 - No `ANTHROPIC_API_KEY` was available, so every live investigation ran on the rule-based playbook.
   The LLM loop is covered by unit tests against a scripted fake model, but its real-world accuracy
   and cost are not measured yet.
-- Eval (rule-based): see [EVAL.md](EVAL.md). It was run in three parts, because the long-running
-  processes were stopped twice when the working session ended. Results were recovered from the harness
-  logs and the platform API, and the harness now saves after every scenario.
+- Eval (rule-based): 9 of 10 first pass, 10 of 10 after the ranking fix, control passed; median time to
+  detect 81 s. See [EVAL.md](EVAL.md). It ran in parts, because long-running processes were stopped
+  when the working session ended. Results were recovered from the harness logs and the platform API,
+  the harness now saves after every scenario, and the last runs used detached processes.
+- Bug found by the eval: the playbook ranked candidates by `specificity + log count`, so in the
+  retry-storm scenario the noisier gateway errors outranked the retry storm. Ranking is now specificity
+  first; gateway errors count only gateway-mock's logs. Five new unit tests.
+- Load test: see [LOADTEST.md](LOADTEST.md). The first run reached 2,088 events/s with p99 24 s,
+  because each request made its own Kafka send through an idempotent producer (one request in flight).
+  Added micro-batching (`BatchingPublisher`) and made the producer non-idempotent (duplicates are
+  already removed by `eventId`): 4,998 events/s with p99 273 ms. The 50 ms p99 target is not met on this
+  laptop. Indexing sustains about 1,700 events/s under load; Kafka buffers the rest without loss.
+  Tried parallel partition consumption in the indexer: no gain and worse API latency, so reverted.
+- Found after the load test: 3.2 million synthetic records in the log indices made every detector
+  pass time out (the per-minute aggregation reads raw logs). Added `npm run loadtest:clean` and a
+  30 s timeout for aggregations; the detector recovered. Rollups are the fix at real scale (LOADTEST.md).
 - Bugs found and fixed:
   - Docker Desktop restarts left the platform down: the API and worker exited when Kafka was not yet
     accepting clients. Startup now retries with backoff.

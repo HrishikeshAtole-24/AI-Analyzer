@@ -25,7 +25,10 @@ in the same piece of work, not later:
 - `npm run traffic -- --rps 10`
 - `npm run dev:dashboard` (Next.js on :3000; included in `dev:all`)
 - `npm run eval` (all fault scenarios, ~100 min; `-- --only <id>,<id>` for a subset), reports in `eval/results/`
-- `npm run loadtest` (k6 in Docker against `POST /api/v1/logs`)
+- `npm run loadtest` (k6 in Docker against `POST /api/v1/logs`), then always `npm run loadtest:clean`
+  (synthetic records otherwise make detection time out)
+- Long runs (eval, services) end when the Claude session ends; start them detached
+  (PowerShell `Start-Process`) and write output to `.runlogs/`
 - LLM investigator: set `ANTHROPIC_API_KEY` in `.env`; without it the rule-based playbook runs
 - Schema change: edit `apps/platform/prisma/schema.prisma`, then `npm run db:migrate`
 - `npm test`, `npm run typecheck`. Run both before calling work done.

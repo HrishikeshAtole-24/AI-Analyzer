@@ -2,6 +2,7 @@ import { HttpError, logRecordSchema, MAX_BATCH_SIZE, type Logger, type LogRecord
 import { Router } from 'express';
 import type { Producer } from 'kafkajs';
 import { z } from 'zod';
+import { BatchingPublisher } from '../clients/batching-publisher';
 import { sendToDlq, type DeadLetter } from '../clients/kafka';
 import { config } from '../config';
 
@@ -29,6 +30,7 @@ export function splitBatch(records: unknown[]): SplitResult {
  */
 export function ingestRouter(producer: Producer, logger: Logger): Router {
   const router = Router();
+  const publisher = new BatchingPublisher(producer, config.topics.raw);
 
   router.post('/api/v1/logs', async (req, res) => {
     const body = envelope.safeParse(req.body);
@@ -39,12 +41,8 @@ export function ingestRouter(producer: Producer, logger: Logger): Router {
 
     try {
       if (valid.length > 0) {
-        await producer.send({
-          topic: config.topics.raw,
-          acks: -1,
-          // Keyed by service: one service's logs stay ordered within a partition.
-          messages: valid.map((r) => ({ key: r.resource['service.name'], value: JSON.stringify(r) })),
-        });
+        // Keyed by service: one service's logs stay ordered within a partition.
+        await publisher.publish(valid.map((r) => ({ key: r.resource['service.name'], value: JSON.stringify(r) })));
       }
       const failedAt = new Date().toISOString();
       await sendToDlq(

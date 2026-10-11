@@ -25,13 +25,17 @@ export async function ensureTopics(): Promise<void> {
 }
 
 /**
- * Idempotent producer: the broker drops duplicates caused by producer retries, and acks=all
- * (set per send) means a 202 from the API only goes out once the batch is durable.
+ * acks=all (set per send) means a 202 from the API only goes out once the batch is durable.
+ *
+ * The producer is deliberately NOT idempotent. Kafka's idempotent mode allows one request in
+ * flight, which made the API's p99 latency the length of the queue behind it (909 ms at 5,000
+ * events/s). Duplicates are already removed at storage (`_id = eventId`), and log order comes
+ * from timestamps at search time, so several sends in flight lose nothing.
  */
 export function createProducer(): Producer {
   return kafka.producer({
-    idempotent: true,
-    maxInFlightRequests: 1,
+    idempotent: false,
+    maxInFlightRequests: 5,
     createPartitioner: Partitioners.DefaultPartitioner,
   });
 }

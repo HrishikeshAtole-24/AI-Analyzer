@@ -125,7 +125,10 @@ modular monolith plus one worker. The folders under `src/` are the module bounda
 split into services later.
 
 **Kafka between ingest and indexing.** The API returns 202 only after Kafka acknowledges the batch
-(`acks=all`, idempotent producer). Messages are keyed by `service.name`, so each service's logs stay in
+(`acks=all`). Concurrent requests share producer sends through `BatchingPublisher` (micro-batching,
+up to 4 sends in flight). The producer is not idempotent: Kafka's idempotent mode allows one request
+in flight, which made p99 latency 24 s under load. Duplicates are removed at storage instead (see
+below), and log order comes from timestamps. Measured effect in [LOADTEST.md](LOADTEST.md). Messages are keyed by `service.name`, so each service's logs stay in
 order within one partition. The topic has 6 partitions; with 3 services, 3 are in use.
 
 **Idempotency is enforced at storage.** Each record carries a producer-made `eventId`. The worker writes
@@ -321,7 +324,7 @@ See [.env.example](../.env.example). The important ones:
 
 ## Testing
 
-- `npm test` runs Vitest (59 tests). Week 1: pool, fault registry, log schema, exporter. Weeks 2 and 3:
+- `npm test` runs Vitest (68 tests). Week 1: pool, fault registry, log schema, exporter. Weeks 2 and 3:
   EWMA detection, incident lifecycle, log-to-document mapping, batch splitting, worker message parsing,
   and the request logger, including requests the client abandons (499). Weeks 4 and 5: every verifier
   check, verification end to end with a fake ledger (invented ids, runbook citations, re-ranking), the

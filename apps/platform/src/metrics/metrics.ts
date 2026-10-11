@@ -1,6 +1,13 @@
 import { opensearch } from '../clients/opensearch';
 import { config } from '../config';
 
+/**
+ * Aggregations scan every log in the window, so they get more time than ordinary searches (10 s).
+ * They slow down with volume instead of failing; at real scale this calls for pre-aggregated
+ * rollups. See docs/LOADTEST.md.
+ */
+const AGGREGATION_TIMEOUT_MS = 30_000;
+
 /** Metrics for one service in one 1-minute window, derived from its logs. */
 export interface MinuteMetrics {
   windowStart: string;
@@ -73,7 +80,7 @@ export async function getServiceMetrics(opts: { from: string; to: string; servic
         },
       },
     },
-  } as never);
+  } as never, { requestTimeout: AGGREGATION_TIMEOUT_MS });
 
   const aggs = (res.body as { aggregations?: { services: { buckets: { key: string; minutes: { buckets: Bucket[] } }[] } } })
     .aggregations;
@@ -141,7 +148,7 @@ export async function listServices(): Promise<ServiceSummary[]> {
         },
       },
     },
-  } as never);
+  } as never, { requestTimeout: AGGREGATION_TIMEOUT_MS });
 
   type SBucket = {
     key: string;
@@ -187,7 +194,7 @@ export async function getPipelineStats(windowMinutes = 5): Promise<PipelineStats
         lag_max: { max: { script: lagScript } },
       },
     },
-  } as never);
+  } as never, { requestTimeout: AGGREGATION_TIMEOUT_MS });
   const body = res.body as {
     hits: { total: { value: number } };
     aggregations?: { lag: { values: Record<string, number | null> }; lag_max: { value: number | null } };

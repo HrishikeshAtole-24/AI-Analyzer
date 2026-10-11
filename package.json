@@ -30,7 +30,8 @@
     "docs:postman": "node scripts/build-postman.cjs",
     "eval": "npm run start -w @ai-analyzer/eval --",
     "dev:dashboard": "npm run dev -w @ai-analyzer/dashboard",
-    "loadtest": "node scripts/loadtest.cjs"
+    "loadtest": "node scripts/loadtest.cjs",
+    "loadtest:clean": "node --env-file-if-exists=.env scripts/loadtest-clean.cjs"
   },
   "engines": {
     "node": ">=20"

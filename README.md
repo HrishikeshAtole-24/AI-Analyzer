@@ -14,13 +14,13 @@ All numbers are measured on a laptop with the Docker stack in this repo. Method 
 
 | Metric | Target | Measured |
 |---|---|---|
-| Root-cause accuracy (top hypothesis, 10 fault scenarios) | 8 of 10 | RESULT_ACCURACY |
-| False incidents in the control scenario | none | RESULT_CONTROL |
-| Time to detect (fault to incident) | under 2 min | RESULT_TTD |
-| Unsupported claims rejected by the verifier | under 5% | RESULT_CLAIMS |
-| Ingestion throughput | 5,000 events/s | RESULT_THROUGHPUT |
-| Ingestion latency p99 (API returns 202) | under 50 ms | RESULT_P99 |
-| End-to-end lag (event to indexed) | under 5 s | p50 546 ms, p95 1.0 s |
+| Root-cause accuracy (top hypothesis, 10 fault scenarios) | 8 of 10 | **9 of 10** first pass, **10 of 10** after a ranking fix (rule-based mode) |
+| False incidents in the control scenario | none | none |
+| Time to detect (fault to incident) | under 2 min | median 81 s (22 to 95 s) |
+| Unsupported claims rejected by the verifier | under 5% | 0 of 14 (rule-based; LLM path not yet measured) |
+| Ingestion throughput | 5,000 events/s | **4,998 events/s**, 0 errors (indexing keeps up to about 1,700/s; Kafka buffers the rest) |
+| Ingestion latency p99 (API returns 202) | under 50 ms | **Not met:** 273 ms at 5,000/s, 53 ms at 1,000/s (p50 is about 27 ms at every rate) |
+| End-to-end lag (event to indexed) | under 5 s | p50 546 ms, p95 1.0 s at demo traffic; grows above about 1,700 events/s until the backlog drains |
 | Fallback works with the LLM unavailable | summary still shown | Yes: every eval investigation ran on the rule-based fallback (no API key) and produced a verified result |
 | Cost per investigation | logged | $0 (rule-based); LLM cost is logged per investigation once a key is set |
 | Logs lost with OpenSearch down for 40 s | 0 | 0 (5,471 redelivered duplicates dropped by event id) |
@@ -75,9 +75,9 @@ An incident opens about 75 s later and is investigated 30 s after that. Roll bac
 
 | Command | What it does |
 |---|---|
-| `npm test` / `npm run typecheck` | 59 unit tests / strict TypeScript in every workspace |
+| `npm test` / `npm run typecheck` | 68 unit tests / strict TypeScript in every workspace |
 | `npm run eval` | Runs all fault scenarios end to end and scores root-cause accuracy |
-| `npm run loadtest` | k6 (in Docker) load test of log ingestion |
+| `npm run loadtest` | k6 (in Docker) load test of log ingestion; run `npm run loadtest:clean` afterwards |
 | `npm run infra:up` / `infra:down` | Redpanda, OpenSearch, Postgres/pgvector |
 | `npm run db:migrate` | Apply Prisma schema changes |
 | `npm run docs:postman` | Rebuild the Postman collection |
@@ -112,6 +112,8 @@ An incident opens about 75 s later and is investigated 30 s after that. Roll bac
 ## Resume line
 
 > Built an OpenTelemetry-compatible incident platform (Node.js, Kafka, OpenSearch, PostgreSQL)
-> ingesting RESULT_THROUGHPUT_SHORT; anomaly detection opens incidents within RESULT_TTD_SHORT of an
-> injected fault; the investigator named the correct root cause in RESULT_ACCURACY_SHORT fault scenarios,
-> with every cited figure verified against the logs.
+> ingesting 5,000 events/s with zero loss; anomaly detection opens incidents a median 81 s after an
+> injected fault; the investigator named the correct root cause in 10 of 10 fault scenarios, with
+> every cited figure verified against the logs.
+
+Swap in the LLM numbers once the eval has run with an API key.

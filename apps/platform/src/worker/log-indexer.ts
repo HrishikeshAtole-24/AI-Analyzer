@@ -126,6 +126,10 @@ export async function startLogIndexer(producer: Producer, logger: Logger): Promi
   report.unref();
 
   await consumer.run({
+    // Partitions are indexed one at a time (the kafkajs default). Measured on the laptop at
+    // 5,000 events/s: consuming 6 partitions in parallel did not raise indexing throughput
+    // (~2,900 events/s either way; OpenSearch is the limit) but cost the API CPU, and its p99
+    // went from 268 ms to 3.8 s. See docs/LOADTEST.md.
     eachBatchAutoResolve: false,
     eachBatch: async ({ batch, resolveOffset, heartbeat, commitOffsetsIfNecessary, isRunning, isStale }) => {
       if (!isRunning() || isStale() || batch.messages.length === 0) return;
