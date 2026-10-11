@@ -19,11 +19,12 @@
     "prisma": "^6.19.3"
   },
   "dependencies": {
+    "@ai-analyzer/shared": "0.1.0",
+    "@anthropic-ai/sdk": "^0.133.0",
     "@opensearch-project/opensearch": "^3.9.0",
     "@prisma/client": "^6.19.3",
     "express": "^5.2.1",
     "kafkajs": "^2.2.4",
-    "zod": "^4.6.5",
-    "@ai-analyzer/shared": "0.1.0"
+    "zod": "^4.6.5"
   }
 }

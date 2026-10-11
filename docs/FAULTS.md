@@ -19,6 +19,13 @@ investigator run, and check its top hypothesis against the **Root cause** column
 | 3 | `bad_deploy` | payment-service | Release 1.5.0 broke currency conversion for EUR/INR |
 | 4 | `memory_leak` | order-service | Unbounded audit cache grows the heap |
 | 5 | `retry_storm` + `gateway_errors` | payment-service + gateway-mock | Aggressive retries multiply gateway load |
+| 6 | `gateway_errors` | gateway-mock | The gateway returns 5xx (acquirer connection resets) |
+| 7 | `slow_queries` | payment-service | Database queries got slow (database_latency) |
+| 8 | `bad_deploy` | order-service | Release 2.2.0 discount table is missing SKU-WEBCAM |
+| 9 | `decline_spike` (control) | gateway-mock | Not an incident: more card declines (402) are business events |
+
+The eval harness (`npm run eval`, see [EVAL.md](EVAL.md)) runs 10 graded scenarios built from these faults, plus the
+control. Its scenario list is [tools/eval/src/scenarios.ts](../tools/eval/src/scenarios.ts).
 
 ## How to run a scenario
 
@@ -140,13 +147,52 @@ p95 went from about 200 ms to 724 ms and gateway load multiplied. Add bursts
 
 ---
 
-## Planned scenarios
+## 6. `gateway_errors` (alone)
 
-The doc targets 10 scenarios for the "8 of 10 correct" accuracy goal. Candidates for the remaining
-five, to be added in Week 5:
+**Mechanism.** The gateway fails `rate` of charges with 503 and logs `acquirer connection reset by peer`.
+With the normal retry policy (2 retries with backoff), about `rate`^3 of payments still fail.
 
-- Slow DB queries (high latency, no errors)
-- Payment-service down entirely (connection refused)
-- Gateway declines spike (business errors, not system errors: a "not an incident" check)
-- Order-service bad deploy that only fails a single SKU
-- Two faults at once (gateway timeout and a deploy that happens at the same time but is unrelated)
+**Symptoms.** `ERROR acquirer connection reset by peer` on gateway-mock; `gateway call failed, retrying
+(attempt n/3)` on payment-service; payment 502 `gateway_unavailable`; error-rate anomalies on payment and order.
+
+## 7. `slow_queries`
+
+**Mechanism.** Every payments-db query takes `multiplier` times longer (default 25: 50 to 375 ms instead
+of 2 to 15 ms), like a dropped index. The pool logs each query over 200 ms, as a database driver's
+slow-query log would.
+
+**Symptoms.**
+- `WARN slow query on payments-db took 312ms (threshold 200ms)`
+- p95 latency up on payment-service and order-service, with no errors
+- At much higher multipliers, the pool also starts timing out, which is why the playbook ranks
+  `database_latency` above `db_pool_exhaustion` when both patterns appear.
+
+**Detected (Oct 11, smoke eval):** INC-3 opened 63 s after the fault (p95 latency 470 ms vs 153 ms on
+payment-service), and the rule-based investigation named `database_latency @ payment-service` 35 s later.
+
+## 8. `bad_deploy` on order-service
+
+**Mechanism.** Switches order-service to `2.2.0` and posts the deploy. The release prices orders with
+per-SKU discounts read from a table that has no entry for `SKU-WEBCAM`
+([services/order-service/src/pricing.ts](../services/order-service/src/pricing.ts)). Orders containing a webcam
+throw a real `TypeError`, about a third of all orders.
+
+**Symptoms.**
+- `ERROR unhandled error in POST /orders: Cannot read properties of undefined (reading 'percent')`
+  on order-service 2.2.0 only
+- order-service 500s; payment-service is not involved at all (the failing orders never reach it)
+- A deploy of order-service 2.2.0 right before the start
+
+## 9. `decline_spike` (control)
+
+**Mechanism.** The gateway declines `rate` of charges (default 30%) with 402 `insufficient_funds`.
+
+**Expected result:** no incident. Declines are business outcomes. They are 4xx, so they do not count
+in the 5xx error rate, and order and payment latency is unchanged. The eval uses this scenario to check
+for false positives.
+
+## Not yet covered
+
+- A service that is down entirely (connection refused). The demo services cannot restart themselves
+  from a fault toggle, so this needs process control in the harness.
+- Two real causes at once. The red-herring scenario covers one cause plus an unrelated deploy.

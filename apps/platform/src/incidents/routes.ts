@@ -50,6 +50,7 @@ export function incidentRouter(): Router {
       include: {
         events: { orderBy: { at: 'asc' } },
         anomalies: { orderBy: { windowStart: 'asc' } },
+        investigations: { orderBy: { startedAt: 'desc' }, take: 1 },
       },
     });
     res.json(incident);

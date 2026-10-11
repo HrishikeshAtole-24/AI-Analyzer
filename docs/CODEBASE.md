@@ -19,8 +19,24 @@ AI Analyzer/
 │       │   ├── metrics/           metrics.ts: per-minute service metrics, services list, pipeline lag
 │       │   ├── detection/         ewma.ts (pure EWMA/z-score), detector.ts (loop that records anomalies)
 │       │   ├── incidents/         lifecycle.ts (pure rules), service.ts (grouping, deploys, auto-resolve), routes.ts
-│       │   └── deploys/           routes.ts: POST/GET /deploys
-│       └── test/                  Vitest unit tests (detection, lifecycle, pipeline mapping)
+│       │   ├── deploys/           routes.ts: POST/GET /deploys
+│       │   ├── investigation/     the root-cause investigator (Week 4)
+│       │   │   ├── findings.ts    Findings schema (Zod + JSON Schema for submit_findings), categories, checks
+│       │   │   ├── tools.ts       investigator tools + EvidenceLedger (records and re-runs every query)
+│       │   │   ├── llm-agent.ts   manual tool-calling loop on Claude, cost accounting
+│       │   │   ├── prompt.ts      byte-stable system prompt (prompt-cached)
+│       │   │   ├── rule-based.ts  fallback playbook: fixed queries + failure-pattern rules
+│       │   │   ├── verifier.ts    re-runs cited queries, applies checks, drops unsupported claims
+│       │   │   ├── circuit-breaker.ts
+│       │   │   ├── investigator.ts orchestration, persistence, worker loop
+│       │   │   └── routes.ts      investigate, investigations, runbooks, similar incidents, stats
+│       │   └── knowledge/         embedder.ts (feature hashing), knowledge.ts (runbooks + incident memory, pgvector)
+│       └── test/                  Vitest unit tests (detection, lifecycle, pipeline, investigation, embedder)
+├── apps/
+│   └── dashboard/                 @ai-analyzer/dashboard: Next.js 16 (App Router) + CSS Modules + Recharts, :3000
+│       ├── app/                   incidents list + detail, services (health charts), logs (search), traces
+│       ├── components/            MetricChart, badges, IncidentActions, LogSearch, AutoRefresh
+│       └── lib/                   api.ts (server-side platform client + types), format.ts
 ├── packages/
 │   └── shared/                    @ai-analyzer/shared: code every service uses
 │       ├── src/
@@ -41,7 +57,12 @@ AI Analyzer/
 │   │   └── src/currency.ts        currency tables, including the broken v2 table of the bad deploy
 │   └── gateway-mock/              :4003 POST /v1/charges; faults: gateway_timeout, gateway_errors
 ├── tools/
-│   └── traffic-generator/         CLI: steady + burst order traffic with a live summary
+│   ├── traffic-generator/         CLI: steady + burst order traffic with a live summary
+│   └── eval/                      eval harness: scenarios.ts (ground truth) + index.ts (runner, report)
+├── loadtest/ingest.js             k6 script for POST /api/v1/logs (run in Docker by scripts/loadtest.cjs)
+├── eval/results/                  eval reports (.md + .json per run)
+├── docs/runbooks/                 runbooks, synced into Postgres with embeddings at worker start
+├── .github/workflows/ci.yml       typecheck, unit tests, dashboard build on every push
 ├── infra/postgres/init.sql        enables pgvector on first start
 ├── docker-compose.yml             Redpanda (+ console), OpenSearch, Postgres/pgvector
 ├── scripts/build-postman.cjs      generates the Postman collection
@@ -146,6 +167,70 @@ as pure functions.
 **The platform logs to stdout only.** Sending its own logs through its own ingest would create a
 feedback loop.
 
+### Investigation (Weeks 4 and 5)
+
+**Evidence first, then the model.** The investigator only reaches data through the `EvidenceLedger`.
+Every query gets an id (`q1`, `q2`, ...) and its exact parameters are recorded, with absolute times only.
+Findings must cite those ids with a machine-checkable `check`. The verifier re-runs each cited query and
+keeps a claim only if the check holds on the fresh result. That is what "every claim backed by a real
+log or metric query" means in code. Runbooks and past incidents are rejected as evidence: they describe
+what usually happens, not what happened.
+
+**A manual tool loop, not the SDK tool runner.** The loop must route every call through the ledger,
+enforce a 14-turn and 4-minute budget, and handle `submit_findings` validation errors by asking again.
+`submit_findings` uses `strict: true`, because forced `tool_choice` is not available on Claude Opus 5.5;
+the prompt asks for it, and the loop nudges once if the model stops without it. Data tools in one turn run
+in parallel, and all their results go back in one user message.
+
+**Model and settings.** `claude-opus-5-5` by default (`LLM_MODEL`), effort `medium` (`LLM_EFFORT`).
+Thinking is adaptive (the default). The top-level `cache_control` caches tools + system prompt + earlier
+turns. `fallbacks: "default"` (beta `server-side-fallback-2026-07-01`) re-runs a request on a fallback
+model if a safety classifier declines it. Cost is computed from `usage` per investigation and stored.
+
+**No made-up confidence numbers.** Hypotheses carry `likelihood` (high, medium, low) and a rank. The
+verifier reorders them: verified contradicting evidence pushes a hypothesis down.
+
+**The rule-based playbook is a real fallback, and the baseline.** It runs three fixed queries
+(`summarize_errors`, `get_recent_deploys`, `get_metrics`) and matches known failure patterns, ranked by
+specificity: a deploy with new-version exceptions, slow queries, pool timeouts, heap warnings, retries
+with a high attempt limit, gateway timeouts, gateway errors. Its findings go through the same verifier.
+It is what runs without an API key, and what the LLM should beat on hard cases.
+
+**Log fingerprints.** `summarize_errors` groups WARN+ logs by service and message with numbers and ids
+masked, so 400 pool timeouts with different `waiting=` counts show up as one pattern with a count.
+
+**Circuit breaker counts provider failures only.** Timeouts, connection errors, 429 and 5xx trip it.
+A model that misbehaves (no submission, invalid findings) does not, because that is not an outage.
+
+**Knowledge in Postgres.** Runbooks and incident memories are rows with a `vector(512)` column and an
+HNSW index (`vector_cosine_ops`), queried with the `<=>` cosine-distance operator. Prisma cannot model
+the vector type, so it is `Unsupported("vector(512)")`, writes and searches use `$executeRaw` /
+`$queryRaw`, and the HNSW indexes are added by hand in the migration. The migration also runs
+`CREATE EXTENSION IF NOT EXISTS vector`, so it works on any Postgres with pgvector, including Prisma's
+shadow database.
+
+**Local embeddings.** Anthropic has no embeddings endpoint, and adding an embedding provider or a 100 MB
+local model for seven runbooks was not worth it. `embed()` hashes words and word pairs into 512 signed
+buckets: deterministic, offline, lexical. The interface allows a neural embedder later.
+
+### Dashboard (Week 6)
+
+**Server components fetch, client components act.** Pages are server components that call the platform
+API directly (`lib/api.ts`, `cache: 'no-store'`) and re-render every 8 to 15 s through `AutoRefresh`
+(`router.refresh()`). Interactive parts (status changes, re-investigate, log search) are client
+components that call `/api/platform/*`. `next.config.ts` rewrites that path to the platform API, so
+there is no CORS setup.
+
+**Charts follow the dataviz rules.**
+- One measure per chart, never a second y-axis.
+- One series per chart, so the title names it and no legend is needed.
+- 2 px lines, a recessive grid, a crosshair tooltip.
+- A dashed marker at the incident's first anomalous minute.
+- A minimum y-axis top per unit, so a flat zero line is not drawn on a 0 to 400% scale.
+
+Colors are CSS tokens in `globals.css` with light and dark values. Status colors are reserved for
+state badges and always appear with an icon and a label.
+
 **Prisma 6, not 7.** Prisma 7 requires driver adapters and a config file. Prisma 6.19 is stable and
 needs neither. `npm audit` reports `deepmerge-ts` inside the Prisma CLI. That is a dev-time tool that
 never sees untrusted input.
@@ -175,6 +260,18 @@ The migration is created under `prisma/migrations/`; commit it.
 `clients/opensearch.ts` and to `toLogDocument()` in `logs/document.ts`. Existing daily indices keep the
 old mapping; the field appears from the next index.
 
+**Add an investigator tool.** Add its Zod input to `toolInputs`, its definition to `TOOL_DEFINITIONS` and a
+case to `run()` in `investigation/tools.ts`. Fill the `ToolResult` fields (`count`, `texts`, `metrics`,
+`deploys`) that checks can evaluate, or the verifier will reject claims that cite it.
+
+**Add a failure pattern to the playbook.** Add a rule in `investigation/rule-based.ts` with a score
+that places it correctly against the others, plus a scenario in `tools/eval/src/scenarios.ts` to measure it.
+
+**Add a runbook.** Drop a Markdown file in `docs/runbooks/`. The worker syncs it at its next start.
+
+**Add an eval scenario.** Append to `SCENARIOS` in `tools/eval/src/scenarios.ts` (faults, an optional red-herring
+deploy, the expected category and service), then run `npm run eval -- --only <id>`.
+
 **Add a log field everywhere.** Change `logRecordSchema` in `log-schema.ts`, then `logger.ts`. TypeScript
 flags anything that no longer matches.
 
@@ -198,12 +295,23 @@ See [.env.example](../.env.example). The important ones:
 | `OPENSEARCH_URL` | `http://localhost:9200` | Log store |
 | `KAFKA_BROKERS` | `localhost:19092` | Redpanda |
 | `DETECT_INTERVAL_MS` | 15000 | How often the detector runs |
+| `ANTHROPIC_API_KEY` | unset | Enables the LLM investigator; without it the rule-based playbook runs |
+| `LLM_MODEL` | `claude-opus-5-5` | Model for investigations |
+| `LLM_EFFORT` | `medium` | `low` / `medium` / `high` / `xhigh` / `max` |
+| `RUNBOOK_DIR` | `docs/runbooks` | Where runbooks are synced from |
+| `PLATFORM_URL` | `http://localhost:4000` | Used by the dashboard and the eval harness |
 
 ## Testing
 
-- `npm test` runs Vitest (40 tests). Week 1: pool, fault registry, log schema, exporter. Weeks 2 and 3:
+- `npm test` runs Vitest (59 tests). Week 1: pool, fault registry, log schema, exporter. Weeks 2 and 3:
   EWMA detection, incident lifecycle, log-to-document mapping, batch splitting, worker message parsing,
-  and the request logger, including requests the client abandons (499).
+  and the request logger, including requests the client abandons (499). Weeks 4 and 5: every verifier
+  check, verification end to end with a fake ledger (invented ids, runbook citations, re-ranking), the
+  circuit breaker, log fingerprints, the embedder, and the agent loop against a scripted fake model
+  (tool calls through the ledger, parallel results in one message, invalid submissions, nudge, refusal).
+- `npm run eval` measures root-cause accuracy end to end on the live system; see [EVAL.md](EVAL.md).
+- `npm run loadtest` measures ingestion throughput and latency; see [LOADTEST.md](LOADTEST.md).
+- CI (`.github/workflows/ci.yml`) runs typecheck, unit tests and the dashboard build on every push.
 - `npm run typecheck` runs `tsc --noEmit` in every workspace.
 - Fault behaviour was checked by hand with the traffic generator. Results are in [FAULTS.md](FAULTS.md).
   The Week 5 eval harness will automate this.

@@ -1,0 +1,118 @@
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.head h1 {
+  font-size: 22px;
+}
+
+.sub {
+  margin: 4px 0 0;
+  color: var(--ink-2);
+}
+
+.filters {
+  display: flex;
+  gap: 2px;
+  padding: 3px;
+  background: var(--surface-sunken);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.filter {
+  padding: 4px 12px;
+  border-radius: 6px;
+  color: var(--ink-2);
+}
+.filter:hover {
+  text-decoration: none;
+  color: var(--ink);
+}
+.active {
+  background: var(--surface);
+  color: var(--ink);
+  font-weight: 600;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+}
+
+.tableWrap {
+  overflow-x: auto;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.table th {
+  text-align: left;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+}
+
+.table td {
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+}
+
+.table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.table tbody tr:hover {
+  background: var(--surface-sunken);
+}
+
+.titleCell {
+  min-width: 320px;
+}
+
+.title {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.number {
+  color: var(--ink-muted);
+  font-weight: 500;
+  margin-right: 4px;
+}
+
+.summary {
+  margin: 4px 0 0;
+  color: var(--ink-2);
+  font-size: 13px;
+  max-width: 60ch;
+}
+
+.services {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.nowrap {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-2);
+}

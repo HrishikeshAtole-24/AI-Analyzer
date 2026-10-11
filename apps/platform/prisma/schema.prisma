@@ -57,8 +57,52 @@ model Incident {
   updatedAt     DateTime         @updatedAt
   anomalies     Anomaly[]
   events        IncidentEvent[]
+  investigations Investigation[]
 
   @@index([status, lastAnomalyAt])
+}
+
+enum InvestigationStatus {
+  running
+  completed
+  failed
+}
+
+enum InvestigationMode {
+  /// Tool-calling LLM investigator.
+  llm
+  /// Fixed playbook used when the LLM is unavailable (no key, circuit open, error).
+  rule_based
+}
+
+/// One root-cause investigation of an incident. Every claim it keeps was re-checked by the verifier.
+model Investigation {
+  id              String              @id @default(uuid())
+  incidentId      String
+  incident        Incident            @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+  status          InvestigationStatus @default(running)
+  mode            InvestigationMode
+  /// Why the rule-based path ran instead of the LLM (no_api_key, circuit_open, llm_error, ...).
+  fallbackReason  String?
+  model           String?
+  summary         String?
+  /// Ranked hypotheses with only verified evidence (see investigation/verifier.ts).
+  hypotheses      Json?
+  /// Claims the verifier dropped, with the reason.
+  rejectedClaims  Json?
+  /// Every tool call made, with its resolved parameters: the evidence ledger.
+  toolCalls       Json?
+  claimsTotal     Int                 @default(0)
+  claimsRejected  Int                 @default(0)
+  inputTokens     Int                 @default(0)
+  outputTokens    Int                 @default(0)
+  cacheReadTokens Int                 @default(0)
+  costUsd         Float               @default(0)
+  error           String?
+  startedAt       DateTime            @default(now())
+  finishedAt      DateTime?
+
+  @@index([incidentId, startedAt])
 }
 
 /// One metric of one service in one 1-minute window that broke from its baseline.
@@ -92,4 +136,27 @@ model IncidentEvent {
   at         DateTime @default(now())
 
   @@index([incidentId, at])
+}
+
+/// A runbook from docs/runbooks, embedded for similarity search (pgvector).
+model Runbook {
+  id        String                     @id @default(uuid())
+  slug      String                     @unique
+  title     String
+  body      String
+  embedding Unsupported("vector(512)")?
+  updatedAt DateTime                   @updatedAt
+
+}
+
+/// What was learned from a past incident, embedded so new incidents can find similar ones.
+model IncidentMemory {
+  incidentId String                     @id
+  number     Int
+  text       String
+  category   String?
+  service    String?
+  embedding  Unsupported("vector(512)")?
+  createdAt  DateTime                   @default(now())
+
 }

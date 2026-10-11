@@ -1,0 +1,10 @@
+{
+  "name": "@ai-analyzer/eval",
+  "version": "0.1.0",
+  "private": true,
+  "main": "src/index.ts",
+  "scripts": {
+    "start": "tsx --env-file-if-exists=../../.env src/index.ts",
+    "typecheck": "tsc --noEmit -p ."
+  }
+}

@@ -36,6 +36,10 @@
     {
       "key": "incidentId",
       "value": ""
+    },
+    {
+      "key": "investigationId",
+      "value": ""
     }
   ],
   "item": [
@@ -1927,6 +1931,523 @@
                 "type": "text/javascript",
                 "exec": [
                   "pm.test('status is 200 or 409', () => pm.expect(pm.response.code).to.be.oneOf([200, 409]));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Platform: investigations and knowledge",
+      "description": "Investigations run automatically 30 s after detection: LLM when ANTHROPIC_API_KEY is set, rule-based playbook otherwise.",
+      "item": [
+        {
+          "name": "List incidents (pick newest)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{platformUrl}}/api/v1/incidents?status=all&limit=1",
+              "host": [
+                "{{platformUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "incidents"
+              ],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "all"
+                },
+                {
+                  "key": "limit",
+                  "value": "1"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.expect(pm.response.code).to.be.oneOf([200]));",
+                  "const body = pm.response.json();",
+                  "if (body.incidents.length) pm.collectionVariables.set('incidentId', body.incidents[0].id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Investigations of an incident",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{platformUrl}}/api/v1/incidents/{{incidentId}}/investigations",
+              "host": [
+                "{{platformUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "incidents",
+                "{{incidentId}}",
+                "investigations"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200 or 404', () => pm.expect(pm.response.code).to.be.oneOf([200, 404]));",
+                  "const body = pm.response.json();",
+                  "if (body.investigations && body.investigations.length) pm.collectionVariables.set('investigationId', body.investigations[0].id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get investigation (hypotheses, evidence, queries)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{platformUrl}}/api/v1/investigations/{{investigationId}}",
+              "host": [
+                "{{platformUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "investigations",
+                "{{investigationId}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200 or 404', () => pm.expect(pm.response.code).to.be.oneOf([200, 404]));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Re-run investigation",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{platformUrl}}/api/v1/incidents/{{incidentId}}/investigate",
+              "host": [
+                "{{platformUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "incidents",
+                "{{incidentId}}",
+                "investigate"
+              ]
+            },
+            "description": "Runs in the background; poll the investigations list."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 202 or 404', () => pm.expect(pm.response.code).to.be.oneOf([202, 404]));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Investigation stats",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{platformUrl}}/api/v1/stats/investigations",
+              "host": [
+                "{{platformUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "stats",
+                "investigations"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.expect(pm.response.code).to.be.oneOf([200]));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Search runbooks",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{platformUrl}}/api/v1/runbooks?q=timeout acquiring connection from pool&limit=3",
+              "host": [
+                "{{platformUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "runbooks"
+              ],
+              "query": [
+                {
+                  "key": "q",
+                  "value": "timeout acquiring connection from pool"
+                },
+                {
+                  "key": "limit",
+                  "value": "3"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.expect(pm.response.code).to.be.oneOf([200]));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Similar past incidents",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{platformUrl}}/api/v1/incidents/{{incidentId}}/similar",
+              "host": [
+                "{{platformUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "incidents",
+                "{{incidentId}}",
+                "similar"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200 or 404', () => pm.expect(pm.response.code).to.be.oneOf([200, 404]));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Scenario 6: Slow queries",
+      "description": "Every payments-db query 25x slower; payment-service logs slow queries and latency rises.",
+      "item": [
+        {
+          "name": "Enable slow_queries (payment)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{paymentUrl}}/admin/faults/slow_queries",
+              "host": [
+                "{{paymentUrl}}"
+              ],
+              "path": [
+                "admin",
+                "faults",
+                "slow_queries"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"multiplier\": 25\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.expect(pm.response.code).to.be.oneOf([200]));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Disable slow_queries (payment)",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{paymentUrl}}/admin/faults/slow_queries",
+              "host": [
+                "{{paymentUrl}}"
+              ],
+              "path": [
+                "admin",
+                "faults",
+                "slow_queries"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.expect(pm.response.code).to.be.oneOf([200]));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Scenario 7: Order bad deploy",
+      "description": "order-service 2.2.0 reads a discount table missing SKU-WEBCAM: TypeError for orders containing it.",
+      "item": [
+        {
+          "name": "Enable bad_deploy (order)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{orderUrl}}/admin/faults/bad_deploy",
+              "host": [
+                "{{orderUrl}}"
+              ],
+              "path": [
+                "admin",
+                "faults",
+                "bad_deploy"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"version\": \"2.2.0\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.expect(pm.response.code).to.be.oneOf([200]));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create order with a webcam (fails)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{orderUrl}}/orders",
+              "host": [
+                "{{orderUrl}}"
+              ],
+              "path": [
+                "orders"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"customerId\": \"cus_1042\",\n  \"currency\": \"USD\",\n  \"items\": [\n    {\n      \"sku\": \"SKU-WEBCAM\",\n      \"quantity\": 1,\n      \"unitPrice\": 59.99\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 500', () => pm.expect(pm.response.code).to.be.oneOf([500]));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Disable bad_deploy (order)",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{orderUrl}}/admin/faults/bad_deploy",
+              "host": [
+                "{{orderUrl}}"
+              ],
+              "path": [
+                "admin",
+                "faults",
+                "bad_deploy"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.expect(pm.response.code).to.be.oneOf([200]));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Scenario 8: Decline spike (control)",
+      "description": "30% of cards declined (402). A business event: no incident should open.",
+      "item": [
+        {
+          "name": "Enable decline_spike (gateway)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{gatewayUrl}}/admin/faults/decline_spike",
+              "host": [
+                "{{gatewayUrl}}"
+              ],
+              "path": [
+                "admin",
+                "faults",
+                "decline_spike"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"rate\": 0.3\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.expect(pm.response.code).to.be.oneOf([200]));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Disable decline_spike (gateway)",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{gatewayUrl}}/admin/faults/decline_spike",
+              "host": [
+                "{{gatewayUrl}}"
+              ],
+              "path": [
+                "admin",
+                "faults",
+                "decline_spike"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.expect(pm.response.code).to.be.oneOf([200]));"
                 ]
               }
             }

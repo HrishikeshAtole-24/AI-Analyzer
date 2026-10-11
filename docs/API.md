@@ -8,7 +8,8 @@ Every HTTP endpoint in the project, by service. The Postman collection in
 | order-service | 4001 | `http://localhost:4001` | Week 1, done |
 | payment-service | 4002 | `http://localhost:4002` | Week 1, done |
 | gateway-mock | 4003 | `http://localhost:4003` | Week 1, done |
-| platform API | 4000 | `http://localhost:4000` | Weeks 2 and 3, done |
+| platform API | 4000 | `http://localhost:4000` | Weeks 2 to 5, done |
+| dashboard | 3000 | `http://localhost:3000` | Week 6, done (UI, calls the platform API through `/api/platform/*`) |
 
 ## Conventions
 
@@ -142,6 +143,7 @@ Most recent orders first. `limit` defaults to 20, maximum 100. Response: `{ "ord
 | Name | Params (defaults) |
 |---|---|
 | `db_pool_exhaustion` | `leakRate` 0.3 (0 to 1) |
+| `bad_deploy` | `version` "2.2.0" |
 | `memory_leak` | `kbPerRequest` 256 (1 to 4096), `maxHeapMb` 600 (64 to 2048) |
 
 ---
@@ -197,6 +199,7 @@ Returns one `Payment`, or `404 not_found`.
 |---|---|
 | `db_pool_exhaustion` | `leakRate` 0.3 |
 | `bad_deploy` | `version` "1.5.0" |
+| `slow_queries` | `multiplier` 25 (1 to 100) |
 | `retry_storm` | `maxRetries` 8 (0 to 20), `backoff` false |
 
 ---
@@ -230,6 +233,7 @@ Request:
 |---|---|
 | `gateway_timeout` | `delayMs` 10000 (0 to 60000), `rate` 1 (0 to 1) |
 | `gateway_errors` | `rate` 0.5, `status` 503 (500 to 599) |
+| `decline_spike` | `rate` 0.3 (0 to 1); more 402 declines, a business event that must not open an incident |
 
 ---
 
@@ -252,6 +256,12 @@ stack (`npm run infra:up`) and the database migrated (`npm run db:deploy`).
 | `GET` | `/api/v1/incidents` | List incidents |
 | `GET` | `/api/v1/incidents/:id` | One incident with timeline and anomalies |
 | `PATCH` | `/api/v1/incidents/:id` | Change incident status |
+| `POST` | `/api/v1/incidents/:id/investigate` | Start another root-cause investigation |
+| `GET` | `/api/v1/incidents/:id/investigations` | Investigations of an incident |
+| `GET` | `/api/v1/investigations/:id` | One investigation: hypotheses, evidence, queries, cost |
+| `GET` | `/api/v1/stats/investigations` | Unsupported-claim rate, cost, modes |
+| `GET` | `/api/v1/runbooks?q=` | Runbooks most similar to a query (pgvector) |
+| `GET` | `/api/v1/incidents/:id/similar` | Past incidents similar to this one |
 
 Platform-specific error codes:
 
@@ -520,3 +530,119 @@ Allowed moves:
 | `identified` | `investigating`, `resolved` |
 
 `resolved` is final; a recurrence opens a new incident. Other moves return `409 invalid_transition`.
+
+### Investigations (Week 4)
+
+Every new incident is investigated automatically about 30 s after detection, by the worker.
+
+- **With an LLM key** (`ANTHROPIC_API_KEY` in `.env`), a tool-calling Claude agent investigates.
+- **Without a key, or when the LLM fails or its circuit is open,** a rule-based playbook runs.
+
+Either way, a verifier re-runs every cited query, and only verified claims are stored. See
+[PROJECT_FLOW.md](PROJECT_FLOW.md#7-investigation-flow-built).
+
+#### `POST /api/v1/incidents/:id/investigate`
+
+Starts another investigation in the background and returns at once.
+
+```json
+{ "incidentId": "6c1e...", "status": "started", "llmAvailable": false }
+```
+
+#### `GET /api/v1/incidents/:id/investigations`
+
+All investigations of an incident, newest first: `{ "investigations": Investigation[], "count": n }`.
+`GET /api/v1/incidents/:id` also includes the latest one as `investigations[0]`.
+
+#### `GET /api/v1/investigations/:id`
+
+```json
+{
+  "id": "0f3a...",
+  "incidentId": "6c1e...",
+  "status": "completed",
+  "mode": "rule_based",
+  "fallbackReason": "no_api_key",
+  "model": null,
+  "summary": "Rule-based analysis of INC-3: most likely slow database queries on payment-service (database_latency).",
+  "hypotheses": [
+    {
+      "rank": 1,
+      "title": "Slow database queries on payment-service",
+      "category": "database_latency",
+      "service": "payment-service",
+      "description": "payment-service logs slow queries; its latency rises without connection errors.",
+      "likelihood": "high",
+      "supporting": [
+        {
+          "claim": "payment-service logs slow database queries.",
+          "query_id": "q1",
+          "check": { "kind": "log_text_present", "text": "slow query", "service": null, "metric": null, "op": null, "value": null, "version": null },
+          "verified": true,
+          "observed": "found in: \"slow query on payments-db took 205ms (threshold 200ms)\""
+        }
+      ],
+      "contradicting": [],
+      "recommended_actions": ["Check the query plan and recent schema or index changes.", "Runbook: Slow database queries (docs/runbooks/slow-queries.md)"]
+    }
+  ],
+  "rejectedClaims": [],
+  "toolCalls": [{ "id": "q1", "tool": "summarize_errors", "input": { "from": "...", "to": "..." }, "at": "...", "ok": true }],
+  "claimsTotal": 1,
+  "claimsRejected": 0,
+  "inputTokens": 0,
+  "outputTokens": 0,
+  "cacheReadTokens": 0,
+  "costUsd": 0,
+  "startedAt": "2026-10-11T10:14:50.000Z",
+  "finishedAt": "2026-10-11T10:14:52.000Z"
+}
+```
+
+| Field | Meaning |
+|---|---|
+| `mode` | `llm` or `rule_based` |
+| `fallbackReason` | Why the playbook ran: `no_api_key`, `circuit_open`, `llm_error: ...`, `no_verified_hypotheses` |
+| `hypotheses` | Ranked, verified only. `category` is one of `deploy_regression`, `db_pool_exhaustion`, `database_latency`, `upstream_timeout`, `upstream_errors`, `memory_leak`, `retry_storm`, `traffic_spike`, `config_change`, `unknown` |
+| `check.kind` | `log_count_at_least`, `log_text_present`, `metric_threshold`, `deploy_present` |
+| `rejectedClaims` | Claims the verifier dropped, with the reason |
+| `toolCalls` | The evidence ledger: every query, with its exact parameters (`q1`, `q2`, ...) |
+| `costUsd` | LLM tokens x price (Claude Opus 5.5: $4 / $20 per million input / output) |
+
+#### `GET /api/v1/stats/investigations`
+
+Totals behind the success metrics.
+
+```json
+{
+  "investigations": 12,
+  "byMode": { "llm": 0, "rule_based": 12 },
+  "claimsTotal": 19,
+  "claimsRejected": 0,
+  "unsupportedClaimRate": 0,
+  "avgCostUsd": null,
+  "totalCostUsd": 0,
+  "llm": { "configured": false, "model": "claude-opus-5-5", "circuit": "closed" }
+}
+```
+
+### Knowledge base (Week 5)
+
+Runbooks from `docs/runbooks/*.md` and the conclusions of past incidents are stored in Postgres with
+pgvector embeddings and searched by cosine similarity.
+
+#### `GET /api/v1/runbooks?q=timeout acquiring connection&limit=3`
+
+```json
+{ "runbooks": [{ "slug": "db-pool-exhaustion", "title": "Database connection pool exhausted", "similarity": 0.369, "excerpt": "...", "body": "..." }] }
+```
+
+`q` must be at least 3 characters; `limit` is at most 10.
+
+#### `GET /api/v1/incidents/:id/similar`
+
+Past incidents whose stored conclusion is closest to this incident's title, services and summary.
+
+```json
+{ "incidents": [{ "number": 3, "text": "INC-3: ... Cause: Slow database queries on payment-service (database_latency in payment-service). ...", "category": "database_latency", "service": "payment-service", "similarity": 0.41 }] }
+```

@@ -1,0 +1,32 @@
+[
+  {
+    "id": "slow-queries",
+    "name": "payments-db queries 25x slower",
+    "expected": "database_latency @ payment-service",
+    "costUsd": 0,
+    "mode": "rule_based",
+    "fallbackReason": "no_api_key",
+    "claims": "0/1",
+    "got": "database_latency @ payment-service",
+    "correct": true,
+    "top3": true,
+    "incident": 3,
+    "timeToDetectS": 63,
+    "timeToRootCauseS": 99.4
+  },
+  {
+    "id": "bad-deploy-order",
+    "name": "order-service 2.2.0 discount table missing a SKU",
+    "expected": "deploy_regression @ order-service",
+    "costUsd": 0,
+    "mode": "rule_based",
+    "fallbackReason": "no_api_key",
+    "claims": "0/2",
+    "got": "deploy_regression @ order-service",
+    "correct": true,
+    "top3": true,
+    "incident": 4,
+    "timeToDetectS": 82.6,
+    "timeToRootCauseS": 117.8
+  }
+]

@@ -1,0 +1,39 @@
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.button,
+.primary {
+  padding: 6px 14px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  cursor: pointer;
+  font-weight: 550;
+}
+.button:hover:not(:disabled) {
+  background: var(--surface-sunken);
+}
+
+.primary {
+  background: var(--ink);
+  color: var(--surface);
+  border-color: var(--ink);
+}
+.primary:hover:not(:disabled) {
+  opacity: 0.88;
+}
+
+.button:disabled,
+.primary:disabled {
+  opacity: 0.55;
+  cursor: progress;
+}
+
+.error {
+  color: var(--critical-ink);
+  font-size: 13px;
+}

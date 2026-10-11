@@ -97,6 +97,7 @@ const collection = {
     { key: 'paymentId', value: '' },
     { key: 'traceId', value: '' },
     { key: 'incidentId', value: '' },
+    { key: 'investigationId', value: '' },
   ],
   item: [
     folder('Health', [
@@ -266,6 +267,51 @@ const collection = {
         note: 'checking recent deploys',
       }, { expect: [200, 409], description: '409 if the incident is already resolved.' }),
     ], 'Incidents open automatically: run traffic, wait 5 minutes for a baseline, then run Scenario 3 (bad deploy).'),
+    folder('Platform: investigations and knowledge', [
+      req('List incidents (pick newest)', 'GET', 'platformUrl', 'api/v1/incidents?status=all&limit=1', undefined, {
+        expect: [200],
+        script: ["if (body.incidents.length) pm.collectionVariables.set('incidentId', body.incidents[0].id);"],
+      }),
+      req('Investigations of an incident', 'GET', 'platformUrl', 'api/v1/incidents/{{incidentId}}/investigations', undefined, {
+        expect: [200, 404],
+        script: ["if (body.investigations && body.investigations.length) pm.collectionVariables.set('investigationId', body.investigations[0].id);"],
+      }),
+      req('Get investigation (hypotheses, evidence, queries)', 'GET', 'platformUrl', 'api/v1/investigations/{{investigationId}}', undefined, {
+        expect: [200, 404],
+      }),
+      req('Re-run investigation', 'POST', 'platformUrl', 'api/v1/incidents/{{incidentId}}/investigate', undefined, {
+        expect: [202, 404],
+        description: 'Runs in the background; poll the investigations list.',
+      }),
+      req('Investigation stats', 'GET', 'platformUrl', 'api/v1/stats/investigations', undefined, { expect: [200] }),
+      req('Search runbooks', 'GET', 'platformUrl', 'api/v1/runbooks?q=timeout acquiring connection from pool&limit=3', undefined, {
+        expect: [200],
+      }),
+      req('Similar past incidents', 'GET', 'platformUrl', 'api/v1/incidents/{{incidentId}}/similar', undefined, { expect: [200, 404] }),
+    ], 'Investigations run automatically 30 s after detection: LLM when ANTHROPIC_API_KEY is set, rule-based playbook otherwise.'),
+    folder(
+      'Scenario 6: Slow queries',
+      [enable('slow_queries', 'paymentUrl', 'payment', { multiplier: 25 }), disable('slow_queries', 'paymentUrl', 'payment')],
+      'Every payments-db query 25x slower; payment-service logs slow queries and latency rises.',
+    ),
+    folder(
+      'Scenario 7: Order bad deploy',
+      [
+        enable('bad_deploy', 'orderUrl', 'order', { version: '2.2.0' }),
+        req('Create order with a webcam (fails)', 'POST', 'orderUrl', 'orders', {
+          customerId: 'cus_1042',
+          currency: 'USD',
+          items: [{ sku: 'SKU-WEBCAM', quantity: 1, unitPrice: 59.99 }],
+        }, { expect: [500] }),
+        disable('bad_deploy', 'orderUrl', 'order'),
+      ],
+      'order-service 2.2.0 reads a discount table missing SKU-WEBCAM: TypeError for orders containing it.',
+    ),
+    folder(
+      'Scenario 8: Decline spike (control)',
+      [enable('decline_spike', 'gatewayUrl', 'gateway', { rate: 0.3 }), disable('decline_spike', 'gatewayUrl', 'gateway')],
+      '30% of cards declined (402). A business event: no incident should open.',
+    ),
   ],
 };
 

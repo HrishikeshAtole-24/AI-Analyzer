@@ -3,7 +3,13 @@
 How data moves through the system: what exists today and what each week adds.
 Diagrams use Mermaid, which renders on GitHub and in VS Code's Markdown preview.
 
-**Built so far:** Weeks 1 to 3: demo services and faults, the ingestion pipeline (API, Kafka, worker, OpenSearch), log search and trace view, per-minute metrics, anomaly detection, deploy tracking and incidents. Next: the AI investigator (Week 4).
+**Built:** all six weeks.
+- Demo services and faults.
+- The ingestion pipeline (API, Kafka, worker, OpenSearch), log search and trace view.
+- Per-minute metrics, anomaly detection, deploy tracking and incidents.
+- The AI investigator with evidence verification and a rule-based fallback.
+- Runbook and past-incident search (pgvector).
+- The eval harness, the k6 load test and the Next.js dashboard.
 
 ## 1. The big picture
 
@@ -22,7 +28,7 @@ flowchart LR
     W -. bad events .-> DLQ[(logs.dlq)]
   end
 
-  subgraph analysis["Detection (Week 3, built) and AI (Weeks 4 to 5)"]
+  subgraph analysis["Detection and AI (Weeks 3 to 5, built)"]
     DET[metrics + anomaly detector] --> INC[(Postgres<br/>incidents, deploys)]
     INC --> AI[AI investigator]
     AI -- tools: search_logs, get_metrics,<br/>get_recent_deploys, get_trace --> OSR
@@ -31,7 +37,7 @@ flowchart LR
 
   OS & PS & GW -- batched OTel log records --> API
   OSR --> DET
-  INC --> UI[Next.js dashboard<br/>Week 6]
+  INC --> UI[Next.js dashboard :3000]
   OSR --> UI
 ```
 
@@ -178,29 +184,89 @@ settles for 15 s, and the next detector tick (at most 15 s later) opens the inci
 Incident lifecycle: `detected -> investigating -> identified -> resolved` (also `identified -> investigating`).
 Changes come from `PATCH /api/v1/incidents/:id` or auto-resolve. Every change is a timeline event.
 
-## 7. Investigation flow (Week 4, planned)
+## 7. Investigation flow (built)
 
 ```mermaid
 sequenceDiagram
-  participant W as log worker
-  participant D as detector
+  autonumber
+  participant L as worker: investigator loop
   participant DB as Postgres
-  participant AI as AI investigator
-  participant V as evidence verifier
-  participant S as OpenSearch
+  participant AI as Claude (tool calling)
+  participant LG as evidence ledger
+  participant T as tools (OpenSearch, Postgres, pgvector)
+  participant V as verifier
 
-  W->>S: index logs
-  loop every minute
-    D->>S: aggregate rate, error rate, p95 per service
-    D->>D: EWMA / z-score against baseline
+  L->>DB: new open incident, detected 30 s ago, not investigated
+  L->>DB: status detected -> investigating
+  alt LLM key set and circuit closed
+    loop up to 14 turns, 4 min deadline
+      L->>AI: incident context + tools (system prompt and tools cached)
+      AI-->>L: tool_use: summarize_errors / get_metrics / search_logs / get_trace / get_recent_deploys / search_runbooks / find_similar_incidents
+      L->>LG: run each call, record exact params as q1, q2, ...
+      LG->>T: query
+      T-->>AI: result tagged with its query_id
+    end
+    AI-->>L: submit_findings (strict schema): ranked hypotheses, each claim = query_id + check
+  else no key, circuit open, LLM error, or nothing verifiable
+    L->>LG: rule-based playbook: summarize_errors, get_recent_deploys, get_metrics
+    LG->>T: query
+    L->>L: match known failure patterns, rank, attach closest runbook
   end
-  D->>DB: open incident (status: detected), group related anomalies
-  DB->>AI: incident opened
-  AI->>S: search_logs / get_metrics / get_trace
-  AI->>DB: get_recent_deploys
-  AI->>V: ranked hypotheses + cited queries
-  V->>S: re-run every cited query
-  V->>DB: keep supported claims only (status: identified)
+  L->>V: findings + ledger
+  V->>LG: re-run every cited query with the same params
+  V->>V: apply each check; drop failed or invented claims; drop hypotheses with no support
+  V->>DB: Investigation (verified hypotheses, rejected claims, queries, tokens, cost)
+  L->>DB: incident summary, status investigating -> identified, timeline event
+  L->>DB: IncidentMemory (embedding) for future similar-incident search
 ```
 
-If the LLM call fails (timeout, retries used up, circuit open), a rule-based summary is stored instead.
+**What makes a claim verifiable.** Every piece of evidence names a `query_id` from the ledger and one of
+four checks: `log_count_at_least`, `log_text_present`, `metric_threshold` or `deploy_present`. The
+verifier runs that same query again and evaluates the check on the fresh result. Three cases are
+rejected and listed under "rejected claims":
+- a claim that cites a query that never ran
+- a claim whose check fails on the re-run
+- a claim that cites a runbook or a past incident (those are context, not evidence about this incident)
+
+**Resilience.**
+- Each LLM request has a 90 s timeout, and the SDK retries 429 and 5xx twice with backoff.
+- A circuit breaker opens after 3 consecutive provider failures and refuses LLM calls for 2 minutes;
+  after that, one trial call is allowed.
+- The agent stops after 14 turns or 4 minutes.
+- A refusal from the model's safety classifier is retried on a fallback model server-side (`fallbacks: "default"`).
+- In every failure case the rule-based playbook runs, so an incident always gets a verified answer or an explicit "no verified cause".
+
+**Cost.** Token usage is summed per investigation and priced (Claude Opus 5.5: $4 input, $20 output,
+$0.20 cache read per million tokens). The stable system prompt and tool list are prompt-cached across
+turns. Effort defaults to `medium` (`LLM_EFFORT`).
+
+## 8. Knowledge base (built)
+
+```mermaid
+flowchart LR
+  RB[docs/runbooks/*.md] -- worker start: sync --> E1[embed: feature hashing, 512 dims]
+  E1 --> R[(Runbook table<br/>vector + HNSW index)]
+  INV[completed investigation] --> E2[embed incident + cause]
+  E2 --> M[(IncidentMemory<br/>vector + HNSW index)]
+  Q[search_runbooks / find_similar_incidents<br/>GET /runbooks, /incidents/:id/similar] --> C{cosine distance<br/>ORDER BY embedding <=> query}
+  R --> C
+  M --> C
+```
+
+Embeddings are computed locally: words and word pairs are hashed into 512 signed buckets. This needs no
+model download and no external API. It is lexical, which works because runbooks, error messages and
+incident summaries share vocabulary. A neural embedder can replace `embed()` without changing storage
+or queries.
+
+## 9. Eval and load test (built)
+
+- `npm run eval`:
+  1. Starts steady traffic and waits 6 minutes for a baseline.
+  2. For each scenario: injects the faults, waits for an incident that started after the injection,
+     waits for its investigation, and scores the top hypothesis (category and service) against the
+     known cause.
+  3. Removes the faults, resolves leftovers and cools down 7 minutes.
+
+  Reports go to `eval/results/`; see [EVAL.md](EVAL.md).
+- `npm run loadtest`: k6 (in Docker) sends batches of 100 records to `POST /api/v1/logs` at a rising
+  request rate and reports events/s and the latency of 202 responses. See [LOADTEST.md](LOADTEST.md).

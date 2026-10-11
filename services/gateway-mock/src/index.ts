@@ -32,6 +32,11 @@ const faults = new FaultRegistry()
     }),
   })
   .define({
+    name: 'decline_spike',
+    description: 'More cards are declined (402). A business event, not a failure: no incident should open.',
+    params: z.object({ rate: z.number().min(0).max(1).default(0.3) }),
+  })
+  .define({
     name: 'gateway_errors',
     description: 'A fraction of charges fail with a 5xx, as when the acquirer connection drops.',
     params: z.object({
@@ -90,7 +95,8 @@ startService({
           throw new HttpError(errors.status, 'acquirer_unavailable', 'acquirer unavailable');
         }
 
-        if (Math.random() < DECLINE_RATE) {
+        const declines = faults.active<{ rate: number }>('decline_spike');
+        if (Math.random() < (declines ? declines.rate : DECLINE_RATE)) {
           logger.info('charge declined', {
             'payment.id': charge.paymentId,
             'charge.decline_code': 'insufficient_funds',

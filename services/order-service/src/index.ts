@@ -16,6 +16,7 @@ import {
 } from '@ai-analyzer/shared';
 import { z } from 'zod';
 import { SERVICE } from './identity';
+import { orderTotal } from './pricing';
 
 /**
  * Order service: the entry point of the demo system. It creates an order, asks the payment
@@ -27,6 +28,7 @@ const PAYMENT_SERVICE_URL = env('PAYMENT_SERVICE_URL', 'http://localhost:4002');
 const PAYMENT_TIMEOUT_MS = envInt('ORDER_PAYMENT_TIMEOUT_MS', 5_000);
 
 const pool = new SimulatedDbPool({ name: 'orders-db', size: 10, acquireTimeoutMs: 2_000 });
+const STABLE_VERSION = SERVICE.version;
 
 /**
  * Snapshot cache for order audits. Normally it is trimmed to the latest entries; the
@@ -43,6 +45,13 @@ const faults = new FaultRegistry()
     onDisable: () => pool.reclaimLeaked(),
   })
   .define({
+    name: 'bad_deploy',
+    description: 'Ships version 2.2.0 with per-SKU discounts from a table that is missing SKU-WEBCAM.',
+    params: z.object({ version: z.string().default('2.2.0') }),
+    onEnable: ({ version }) => setVersion(version),
+    onDisable: () => setVersion(STABLE_VERSION),
+  })
+  .define({
     name: 'memory_leak',
     description: 'The audit cache stops evicting and keeps a large snapshot per order.',
     params: z.object({
@@ -54,6 +63,26 @@ const faults = new FaultRegistry()
       auditCache.splice(0, Math.max(0, auditCache.length - AUDIT_CACHE_LIMIT));
     },
   });
+
+function setVersion(version: string): void {
+  SERVICE.version = version;
+  logger.setServiceVersion(version);
+  logger.info(`order-service running version ${version}`, { 'service.version': version });
+  // Plays the CI/CD pipeline: a real deploy posts to the platform's deploy webhook.
+  const url = process.env.DEPLOY_WEBHOOK_URL;
+  if (!url) return;
+  callJson(url, {
+    method: 'POST',
+    timeoutMs: 3_000,
+    body: {
+      service: SERVICE.name,
+      version,
+      environment: SERVICE.environment,
+      description: version === STABLE_VERSION ? 'rollback' : 'per-SKU discounts',
+    },
+  }).catch((err: Error) => process.stderr.write(`[deploy] could not record deploy: ${err.message}
+`));
+}
 
 function recordAudit(orderId: string, payload: unknown): void {
   const leak = faults.active<{ kbPerRequest: number; maxHeapMb: number }>('memory_leak');
@@ -139,7 +168,8 @@ startService({
         throw new HttpError(400, 'invalid_request', 'invalid order', z.flattenError(parsed.error));
       }
       const input = parsed.data;
-      const total = Math.round(input.items.reduce((sum, i) => sum + i.quantity * i.unitPrice, 0) * 100) / 100;
+      // Release 2.2.0 applies per-SKU discounts; see pricing.ts.
+      const total = orderTotal(input.items, SERVICE.version !== STABLE_VERSION);
       const order: Order = {
         id: `ord_${randomUUID()}`,
         ...input,

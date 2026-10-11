@@ -6,6 +6,7 @@ import { ensureLogTemplate, opensearch } from './clients/opensearch';
 import { config, platformLogger } from './config';
 import { deployRouter } from './deploys/routes';
 import { incidentRouter } from './incidents/routes';
+import { investigationRouter } from './investigation/routes';
 import { ingestRouter } from './logs/ingest';
 import { logRouter } from './logs/routes';
 import { metricsRouter } from './metrics/routes';
@@ -39,6 +40,7 @@ async function main(): Promise<void> {
   app.use(metricsRouter());
   app.use(deployRouter(logger));
   app.use(incidentRouter());
+  app.use(investigationRouter(logger));
 
   app.use((req, res) => {
     res.status(404).json({ error: { code: 'not_found', message: `no route for ${req.method} ${req.path}` } });

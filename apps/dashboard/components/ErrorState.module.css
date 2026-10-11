@@ -1,0 +1,19 @@
+.box {
+  padding: 16px 20px;
+  border: 1px solid color-mix(in srgb, var(--critical) 40%, transparent);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+.box p {
+  margin: 4px 0 0;
+  color: var(--ink-2);
+}
+
+.empty {
+  padding: 32px 20px;
+  text-align: center;
+  color: var(--ink-muted);
+  background: var(--surface);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius);
+}

@@ -11,6 +11,9 @@ export interface DbPoolOptions {
   acquireTimeoutMs?: number;
   /** Simulated query time range. */
   queryLatencyMs?: [number, number];
+  /** Queries slower than this are reported through onSlowQuery, like a driver's slow-query log. */
+  slowQueryMs?: number;
+  onSlowQuery?: (durationMs: number, thresholdMs: number) => void;
 }
 
 export interface PoolStats {
@@ -42,6 +45,9 @@ export class SimulatedDbPool {
   readonly size: number;
   private readonly acquireTimeoutMs: number;
   private readonly latency: [number, number];
+  private latencyMultiplier = 1;
+  private readonly slowQueryMs: number;
+  private readonly onSlowQuery?: (durationMs: number, thresholdMs: number) => void;
   private active = 0;
   private leaked = 0;
   private readonly waiters: Waiter[] = [];
@@ -51,6 +57,8 @@ export class SimulatedDbPool {
     this.size = options.size ?? 10;
     this.acquireTimeoutMs = options.acquireTimeoutMs ?? 2_000;
     this.latency = options.queryLatencyMs ?? [2, 15];
+    this.slowQueryMs = options.slowQueryMs ?? 200;
+    this.onSlowQuery = options.onSlowQuery;
   }
 
   /**
@@ -62,7 +70,9 @@ export class SimulatedDbPool {
     let release = true;
     try {
       const [min, max] = this.latency;
-      await sleep(min + Math.random() * (max - min));
+      const queryMs = (min + Math.random() * (max - min)) * this.latencyMultiplier;
+      await sleep(queryMs);
+      if (queryMs >= this.slowQueryMs) this.onSlowQuery?.(Math.round(queryMs), this.slowQueryMs);
       const result = await work();
       if (opts.leak) {
         release = false;
@@ -83,6 +93,11 @@ export class SimulatedDbPool {
       waiting: this.waiters.length,
       leaked: this.leaked,
     };
+  }
+
+  /** Makes every query this many times slower (the slow_queries fault: a missing index, a bloated table). */
+  setLatencyMultiplier(multiplier: number): void {
+    this.latencyMultiplier = multiplier;
   }
 
   /** Returns leaked connections to the pool, as a process restart would. */

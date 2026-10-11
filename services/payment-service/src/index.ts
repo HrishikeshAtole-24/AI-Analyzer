@@ -29,7 +29,17 @@ const GATEWAY_URL = env('GATEWAY_URL', 'http://localhost:4003');
 const GATEWAY_TIMEOUT_MS = envInt('PAYMENT_GATEWAY_TIMEOUT_MS', 2_000);
 const STABLE_VERSION = SERVICE.version;
 
-const pool = new SimulatedDbPool({ name: 'payments-db', size: 10, acquireTimeoutMs: 2_000 });
+const pool = new SimulatedDbPool({
+  name: 'payments-db',
+  size: 10,
+  acquireTimeoutMs: 2_000,
+  slowQueryMs: 200,
+  onSlowQuery: (ms, threshold) =>
+    logger.warn(`slow query on payments-db took ${ms}ms (threshold ${threshold}ms)`, {
+      'db.pool.name': 'payments-db',
+      'db.query.duration_ms': ms,
+    }),
+});
 
 interface RetryPolicy {
   maxRetries: number;
@@ -50,6 +60,13 @@ const faults = new FaultRegistry()
     params: z.object({ version: z.string().default('1.5.0') }),
     onEnable: ({ version }) => setVersion(version),
     onDisable: () => setVersion(STABLE_VERSION),
+  })
+  .define({
+    name: 'slow_queries',
+    description: 'Every payments-db query gets multiplier times slower, like a dropped index.',
+    params: z.object({ multiplier: z.number().min(1).max(100).default(25) }),
+    onEnable: ({ multiplier }) => pool.setLatencyMultiplier(multiplier),
+    onDisable: () => pool.setLatencyMultiplier(1),
   })
   .define({
     name: 'retry_storm',

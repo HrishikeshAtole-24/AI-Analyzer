@@ -13,7 +13,7 @@
     "setup": "npm install && npm run infra:up && npm run db:deploy",
     "dev:services": "concurrently -n gateway,payment,order -c magenta,yellow,cyan \"npm:dev:gateway\" \"npm:dev:payment\" \"npm:dev:order\"",
     "dev:platform": "concurrently -n api,worker -c green,blue \"npm:dev:api\" \"npm:dev:worker\"",
-    "dev:all": "concurrently -n gateway,payment,order,api,worker -c magenta,yellow,cyan,green,blue \"npm:dev:gateway\" \"npm:dev:payment\" \"npm:dev:order\" \"npm:dev:api\" \"npm:dev:worker\"",
+    "dev:all": "concurrently -n gateway,payment,order,api,worker,ui -c magenta,yellow,cyan,green,blue,white \"npm:dev:gateway\" \"npm:dev:payment\" \"npm:dev:order\" \"npm:dev:api\" \"npm:dev:worker\" \"npm:dev:dashboard\"",
     "dev:gateway": "npm run dev -w @ai-analyzer/gateway-mock",
     "dev:payment": "npm run dev -w @ai-analyzer/payment-service",
     "dev:order": "npm run dev -w @ai-analyzer/order-service",
@@ -27,7 +27,10 @@
     "infra:down": "docker compose down",
     "db:migrate": "npm run db:migrate -w @ai-analyzer/platform",
     "db:deploy": "npm run db:deploy -w @ai-analyzer/platform",
-    "docs:postman": "node scripts/build-postman.cjs"
+    "docs:postman": "node scripts/build-postman.cjs",
+    "eval": "npm run start -w @ai-analyzer/eval --",
+    "dev:dashboard": "npm run dev -w @ai-analyzer/dashboard",
+    "loadtest": "node scripts/loadtest.cjs"
   },
   "engines": {
     "node": ">=20"

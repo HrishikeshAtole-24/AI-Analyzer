@@ -3,11 +3,14 @@ import { createProducer, ensureTopics } from './clients/kafka';
 import { ensureLogTemplate } from './clients/opensearch';
 import { platformLogger } from './config';
 import { startDetector } from './detection/detector';
+import { startInvestigator } from './investigation/investigator';
+import { syncRunbooks } from './knowledge/knowledge';
+import { hasLlmCredentials, LLM_MODEL } from './investigation/llm-agent';
 import { startLogIndexer } from './worker/log-indexer';
 
 /**
- * Worker process: consumes logs.raw into OpenSearch, and runs the anomaly detector that opens
- * and resolves incidents. Separate from the API so slow indexing never slows ingestion.
+ * Worker process: consumes logs.raw into OpenSearch, runs the anomaly detector that opens and
+ * resolves incidents, and investigates new incidents (LLM, or the rule-based playbook). Separate from the API so slow indexing never slows ingestion.
  */
 async function main(): Promise<void> {
   const logger = platformLogger('platform-worker');
@@ -16,12 +19,17 @@ async function main(): Promise<void> {
   const producer = createProducer(); // for the dead-letter queue
   await producer.connect();
 
+  await syncRunbooks(logger).catch((err: Error) => logger.warn(`runbook sync failed: ${err.message}`));
   const consumer = await startLogIndexer(producer, logger);
   const stopDetector = startDetector(logger);
-  logger.info('worker started: log indexer and detector running');
+  const stopInvestigator = startInvestigator(logger);
+  logger.info(
+    `worker started: log indexer, detector and investigator running (${hasLlmCredentials() ? `LLM ${LLM_MODEL}` : 'no LLM key: rule-based investigations only'})`,
+  );
 
   const shutdown = async () => {
     stopDetector();
+    stopInvestigator();
     await consumer.disconnect().catch(() => undefined);
     await producer.disconnect().catch(() => undefined);
     await db.$disconnect();
