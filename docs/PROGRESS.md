@@ -10,9 +10,9 @@ every work session.
 | 1 | Oct 5 to 11 | Demo services, OTel logs and traces, fault injection, docker-compose | Done early (Oct 2 to 3) |
 | 2 | Oct 12 to 18 | POST /logs, Kafka, worker, OpenSearch, idempotency, DLQ, log search, trace view | Done early (Oct 3) |
 | 3 | Oct 19 to 25 | 1-minute metrics, EWMA / z-score detection, deploy tracking, incident grouping and lifecycle | Done early (Oct 3) |
-| 4 | Oct 26 to Nov 1 | Tool-calling AI investigator, evidence verifier, ranked hypotheses, resilience + fallback | Not started |
-| 5 | Nov 2 to 8 | Eval harness over every fault scenario; runbook and past-incident search with pgvector | Not started |
-| 6 | Nov 9 to 15 | Next.js dashboard (CSS Modules), k6 load test, README numbers, demo video | Not started |
+| 4 | Oct 26 to Nov 1 | Tool-calling AI investigator, evidence verifier, ranked hypotheses, resilience + fallback | Done early (Oct 11); LLM path needs an API key to measure |
+| 5 | Nov 2 to 8 | Eval harness over every fault scenario; runbook and past-incident search with pgvector | Done early (Oct 11) |
+| 6 | Nov 9 to 15 | Next.js dashboard (CSS Modules), k6 load test, README numbers, demo video | Done early (Oct 11) except recording the video ([DEMO.md](DEMO.md) has the script) |
 
 ## Week 1 checklist
 
@@ -55,7 +55,64 @@ every work session.
 - [x] Injected fault opens an incident: bad deploy detected in 74.5 s (target under 2 min)
 - [ ] Slack webhook alert (should have, skipped)
 
+## Week 4 checklist
+
+- [x] Investigation data model (`Investigation`) and migration
+- [x] Tool-calling investigator on Claude Opus 5.5: manual loop, 7 tools, strict `submit_findings`,
+      prompt caching, server-side refusal fallback, cost per investigation
+- [x] Evidence ledger: every query recorded with exact parameters (`q1`, `q2`, ...)
+- [x] Evidence verifier: re-runs cited queries, 4 check kinds, drops invented or failing claims and
+      unsupported hypotheses, re-ranks on contradicting evidence
+- [x] Ranked hypotheses with likelihood labels, no confidence percentages
+- [x] Resilience: 90 s timeout, SDK retries, circuit breaker (3 failures, 2 min), 14-turn and 4-minute budget
+- [x] Rule-based playbook fallback through the same verifier (runs with no API key)
+- [x] Worker auto-investigates new incidents 30 s after detection; incident moves to identified
+- [x] API: investigate, investigations, investigation detail, stats
+- [x] Unit tests: checks, verifier, circuit breaker, fingerprints, agent loop against a scripted fake model
+- [ ] Measure the LLM path (accuracy, cost, rejected claims): needs `ANTHROPIC_API_KEY`
+
+## Week 5 checklist
+
+- [x] New faults: `slow_queries` (with a slow-query log), order-service `bad_deploy`, `decline_spike` control
+- [x] Eval harness: 10 graded scenarios + 1 control, red-herring deploy, report per run
+- [x] Runbooks (7) in `docs/runbooks`, synced into Postgres with embeddings at worker start
+- [x] pgvector: `Runbook` and `IncidentMemory` tables with HNSW cosine indexes; local feature-hashing embedder
+- [x] `search_runbooks` and `find_similar_incidents` tools; verifier refuses them as evidence
+- [x] Playbook attaches the closest runbook to each hypothesis
+- [x] Eval run over all scenarios (rule-based mode): see [EVAL.md](EVAL.md)
+
+## Week 6 checklist
+
+- [x] Next.js 16 dashboard with CSS Modules and Recharts: incidents list, incident detail (root cause,
+      verified evidence, queries, rejected claims, metrics around the start, timeline, anomalies),
+      service health, log search, trace view; light and dark themes
+- [x] k6 load test in Docker (`npm run loadtest`): see [LOADTEST.md](LOADTEST.md)
+- [x] README with measured numbers, resume line, demo script ([DEMO.md](DEMO.md))
+- [x] GitHub Actions CI: typecheck, unit tests, dashboard build
+- [ ] Record the demo video (a person has to do this)
+
 ## Log
+
+### 2026-10-11: Weeks 4 to 6 built
+
+- Built the investigator, verifier, playbook, knowledge base, eval harness, dashboard, load test
+  and CI (details in the checklists above and in CODEBASE.md). 59 unit tests.
+- No `ANTHROPIC_API_KEY` was available, so every live investigation ran on the rule-based playbook.
+  The LLM loop is covered by unit tests against a scripted fake model, but its real-world accuracy
+  and cost are not measured yet.
+- Eval (rule-based): see [EVAL.md](EVAL.md). It was run in three parts, because the long-running
+  processes were stopped twice when the working session ended. Results were recovered from the harness
+  logs and the platform API, and the harness now saves after every scenario.
+- Bugs found and fixed:
+  - Docker Desktop restarts left the platform down: the API and worker exited when Kafka was not yet
+    accepting clients. Startup now retries with backoff.
+  - A Windows process listening on `[::1]` for Docker's published ports made `localhost` reach
+    the wrong process. Infrastructure URLs and Redpanda's advertised address now use `127.0.0.1`.
+  - Dashboard charts: a flat zero line was drawn on a 0 to 400% axis; the axis now has a minimum
+    top per unit and rounds to "nice" values, and the in-progress minute is no longer plotted.
+- Decisions: manual tool loop instead of the SDK tool runner (ledger and budgets); local lexical
+  embeddings instead of an embedding API; Prisma `Unsupported("vector")` with hand-written HNSW indexes.
+
 
 ### 2026-10-03: Weeks 2 and 3 built
 

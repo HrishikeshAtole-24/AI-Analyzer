@@ -254,6 +254,8 @@ async function main(): Promise<void> {
       const result = await runScenario(s);
       results.push(result);
       log(`${s.id}: ${result.correct ? 'CORRECT' : 'WRONG'} (expected ${result.expected}, got ${result.got})`);
+      // Save after every scenario, so an interrupted run keeps what it measured.
+      await save(results, startedAt);
       if (i < scenarios.length - 1) {
         log(`cooling down ${args['cooldown-min']} min`);
         await sleep(cooldownMs);
@@ -265,13 +267,18 @@ async function main(): Promise<void> {
     await resolveOpenIncidents('eval: finished').catch(() => undefined);
   }
 
+  const { md, stamp } = await save(results, startedAt);
+  process.stdout.write(`\n${md}\nSaved to eval/results/${stamp}.md\n`);
+}
+
+async function save(results: ScenarioResult[], startedAt: Date): Promise<{ md: string; stamp: string }> {
   const md = report(results, startedAt, Number(args['cooldown-min']));
   const dir = path.resolve(__dirname, '../../../eval/results');
   await mkdir(dir, { recursive: true });
   const stamp = startedAt.toISOString().slice(0, 16).replace(/[:T]/g, '-');
   await writeFile(path.join(dir, `${stamp}.md`), md);
   await writeFile(path.join(dir, `${stamp}.json`), JSON.stringify(results, null, 2));
-  process.stdout.write(`\n${md}\nSaved to eval/results/${stamp}.md\n`);
+  return { md, stamp };
 }
 
 main().catch((err) => {

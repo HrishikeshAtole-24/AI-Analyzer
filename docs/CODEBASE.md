@@ -231,6 +231,24 @@ there is no CORS setup.
 Colors are CSS tokens in `globals.css` with light and dark values. Status colors are reserved for
 state badges and always appear with an icon and a label.
 
+### Operations
+
+**Startup waits for its dependencies.** Containers report healthy a little before they accept clients,
+especially after Docker Desktop restarts. The API and worker wrap each infrastructure step (Kafka topics,
+producer, consumer, OpenSearch index template) in `withStartupRetry` (`src/startup.ts`): exponential
+backoff up to 15 s, for up to 3 minutes. They do not exit and wait for a file change to restart.
+
+**Infrastructure URLs use `127.0.0.1`, not `localhost`.** On the development laptop another Windows
+process (`dllhost.exe`) listened on `[::1]` for every port Docker published. Node resolves `localhost`
+to `::1` first, so the platform reached that process instead of Kafka, OpenSearch and Postgres, and
+timed out. Redpanda also advertises `127.0.0.1:19092`, because Kafka clients reconnect to the
+advertised address. Service-to-service HTTP (ports 4000 to 4003) is served by Node itself on both
+stacks, so `localhost` is fine there.
+
+**The eval saves after every scenario.** A full run takes about 100 minutes. If it is interrupted,
+nothing measured is lost: the report and JSON are rewritten after each scenario. `tools/eval/src/recover.ts`
+rebuilds rows from a harness log plus the platform API for runs from before that change.
+
 **Prisma 6, not 7.** Prisma 7 requires driver adapters and a config file. Prisma 6.19 is stable and
 needs neither. `npm audit` reports `deepmerge-ts` inside the Prisma CLI. That is a dev-time tool that
 never sees untrusted input.

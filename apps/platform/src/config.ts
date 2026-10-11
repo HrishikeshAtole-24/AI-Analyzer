@@ -2,8 +2,8 @@ import { createLogger, env, envInt } from '@ai-analyzer/shared';
 
 export const config = {
   port: envInt('PLATFORM_PORT', 4000),
-  kafkaBrokers: env('KAFKA_BROKERS', 'localhost:19092').split(','),
-  opensearchUrl: env('OPENSEARCH_URL', 'http://localhost:9200'),
+  kafkaBrokers: env('KAFKA_BROKERS', '127.0.0.1:19092').split(','),
+  opensearchUrl: env('OPENSEARCH_URL', 'http://127.0.0.1:9200'),
   topics: {
     raw: env('KAFKA_TOPIC_LOGS', 'logs.raw'),
     dlq: env('KAFKA_TOPIC_DLQ', 'logs.dlq'),

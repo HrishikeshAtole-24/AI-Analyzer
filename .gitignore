@@ -9,3 +9,4 @@ graphify-out/.graphify_root
 .next/
 next-env.d.ts
 loadtest/last-summary.json
+.runlogs/

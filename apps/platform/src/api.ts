@@ -4,6 +4,7 @@ import { db } from './clients/db';
 import { createProducer, ensureTopics } from './clients/kafka';
 import { ensureLogTemplate, opensearch } from './clients/opensearch';
 import { config, platformLogger } from './config';
+import { withStartupRetry } from './startup';
 import { deployRouter } from './deploys/routes';
 import { incidentRouter } from './incidents/routes';
 import { investigationRouter } from './investigation/routes';
@@ -17,10 +18,10 @@ import { metricsRouter } from './metrics/routes';
  */
 async function main(): Promise<void> {
   const logger = platformLogger('platform-api');
-  await ensureTopics();
-  await ensureLogTemplate();
+  await withStartupRetry('kafka topics', logger, ensureTopics);
+  await withStartupRetry('opensearch index template', logger, ensureLogTemplate);
   const producer = createProducer();
-  await producer.connect();
+  await withStartupRetry('kafka producer', logger, () => producer.connect());
 
   const app = express();
   app.disable('x-powered-by');

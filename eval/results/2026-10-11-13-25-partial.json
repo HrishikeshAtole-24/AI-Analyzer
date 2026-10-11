@@ -1,0 +1,17 @@
+[
+  {
+    "id": "bad-deploy-order",
+    "name": "order-service 2.2.0 discount table missing a SKU",
+    "expected": "deploy_regression @ order-service",
+    "got": "deploy_regression @ order-service",
+    "correct": true,
+    "top3": true,
+    "incident": 11,
+    "mode": "rule_based",
+    "fallbackReason": "no_api_key",
+    "timeToDetectS": 94.8,
+    "timeToRootCauseS": 130.7,
+    "claims": "0/2",
+    "costUsd": 0
+  }
+]

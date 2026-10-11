@@ -1,0 +1,39 @@
+
+> ai-analyzer@0.1.0 eval
+> npm run start -w @ai-analyzer/eval -- --cooldown-min 6
+
+
+> @ai-analyzer/eval@0.1.0 start
+> tsx --env-file-if-exists=../../.env src/index.ts --cooldown-min 6
+
+[eval 10:25:08] traffic started at 10 orders/s; warming up the baseline for 6 min
+[eval 10:31:08] scenario 1/11: bad-deploy-payment
+[eval 10:31:08] bad-deploy-payment: faults on (payment-service/bad_deploy)
+[eval 10:32:18] bad-deploy-payment: INC-6 detected after 67.9s (order-service, payment-service)
+[eval 10:32:53] bad-deploy-payment: faults off
+[eval 10:32:53] bad-deploy-payment: CORRECT (expected deploy_regression @ payment-service, got deploy_regression @ payment-service)
+[eval 10:32:53] cooling down 6 min
+[eval 10:38:53] scenario 2/11: db-pool-payment
+[eval 10:38:53] db-pool-payment: faults on (payment-service/db_pool_exhaustion)
+[eval 10:40:18] db-pool-payment: INC-7 detected after 82.7s (order-service, payment-service)
+[eval 10:40:54] db-pool-payment: faults off
+[eval 10:40:54] db-pool-payment: CORRECT (expected db_pool_exhaustion @ payment-service, got db_pool_exhaustion @ payment-service)
+[eval 10:40:54] cooling down 6 min
+[eval 10:46:54] scenario 3/11: gateway-timeout
+[eval 10:46:54] gateway-timeout: faults on (gateway-mock/gateway_timeout)
+[eval 10:48:19] gateway-timeout: INC-8 detected after 82.4s (order-service, payment-service, gateway-mock)
+[eval 10:48:54] gateway-timeout: faults off
+[eval 10:48:54] gateway-timeout: CORRECT (expected upstream_timeout @ gateway-mock, got upstream_timeout @ gateway-mock)
+[eval 10:48:54] cooling down 6 min
+[eval 10:54:54] scenario 4/11: gateway-errors
+[eval 10:54:54] gateway-errors: faults on (gateway-mock/gateway_errors)
+[eval 10:55:19] gateway-errors: INC-9 detected after 22.2s (payment-service, gateway-mock)
+[eval 10:55:54] gateway-errors: faults off
+[eval 10:55:54] gateway-errors: CORRECT (expected upstream_errors @ gateway-mock, got upstream_errors @ gateway-mock)
+[eval 10:55:54] cooling down 6 min
+[eval 11:01:54] scenario 5/11: slow-queries
+[eval 11:01:54] slow-queries: faults on (payment-service/slow_queries)
+[eval 11:02:19] slow-queries: INC-10 detected after 22.1s (payment-service)
+[eval 11:02:54] slow-queries: faults off
+[eval 11:02:54] slow-queries: CORRECT (expected database_latency @ payment-service, got database_latency @ payment-service)
+[eval 11:02:54] cooling down 6 min

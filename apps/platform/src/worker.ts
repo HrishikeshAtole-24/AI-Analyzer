@@ -2,6 +2,7 @@ import { db } from './clients/db';
 import { createProducer, ensureTopics } from './clients/kafka';
 import { ensureLogTemplate } from './clients/opensearch';
 import { platformLogger } from './config';
+import { withStartupRetry } from './startup';
 import { startDetector } from './detection/detector';
 import { startInvestigator } from './investigation/investigator';
 import { syncRunbooks } from './knowledge/knowledge';
@@ -14,13 +15,13 @@ import { startLogIndexer } from './worker/log-indexer';
  */
 async function main(): Promise<void> {
   const logger = platformLogger('platform-worker');
-  await ensureTopics();
-  await ensureLogTemplate();
+  await withStartupRetry('kafka topics', logger, ensureTopics);
+  await withStartupRetry('opensearch index template', logger, ensureLogTemplate);
   const producer = createProducer(); // for the dead-letter queue
-  await producer.connect();
+  await withStartupRetry('kafka producer', logger, () => producer.connect());
 
   await syncRunbooks(logger).catch((err: Error) => logger.warn(`runbook sync failed: ${err.message}`));
-  const consumer = await startLogIndexer(producer, logger);
+  const consumer = await withStartupRetry('kafka consumer', logger, () => startLogIndexer(producer, logger));
   const stopDetector = startDetector(logger);
   const stopInvestigator = startInvestigator(logger);
   logger.info(

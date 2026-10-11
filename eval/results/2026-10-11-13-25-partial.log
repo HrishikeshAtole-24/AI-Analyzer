@@ -1,0 +1,15 @@
+
+> ai-analyzer@0.1.0 eval
+> npm run start -w @ai-analyzer/eval -- --cooldown-min 6 --only bad-deploy-order,db-pool-order,retry-storm,timeout-with-red-herring,memory-leak,control-decline-spike
+
+
+> @ai-analyzer/eval@0.1.0 start
+> tsx --env-file-if-exists=../../.env src/index.ts --cooldown-min 6 --only bad-deploy-order,db-pool-order,retry-storm,timeout-with-red-herring,memory-leak,control-decline-spike
+
+[eval 13:25:46] traffic started at 10 orders/s; warming up the baseline for 6 min
+[eval 13:31:46] scenario 1/6: bad-deploy-order
+[eval 13:31:46] bad-deploy-order: faults on (order-service/bad_deploy)
+[eval 13:33:22] bad-deploy-order: INC-11 detected after 94.8s (order-service)
+[eval 13:33:57] bad-deploy-order: faults off
+[eval 13:33:57] bad-deploy-order: CORRECT (expected deploy_regression @ order-service, got deploy_regression @ order-service)
+[eval 13:33:57] cooling down 6 min

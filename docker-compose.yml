@@ -12,7 +12,9 @@ services:
       - --smp 1
       - --memory 512M
       - --kafka-addr internal://0.0.0.0:9092,external://0.0.0.0:19092
-      - --advertise-kafka-addr internal://redpanda:9092,external://localhost:19092
+      # 127.0.0.1, not localhost: on some machines another process holds [::1]:19092, and clients
+      # following the advertised address would reach it instead of Redpanda.
+      - --advertise-kafka-addr internal://redpanda:9092,external://127.0.0.1:19092
     ports:
       - "19092:19092" # Kafka API for apps running on the host
       - "9644:9644" # admin API
